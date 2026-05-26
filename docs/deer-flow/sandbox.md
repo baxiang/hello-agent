@@ -1,0 +1,383 @@
+# 沙箱与执行环境 - 架构理解
+
+**状态**: ⬜ 未开始
+
+**计划开始时间**: 完成部署体验后
+
+---
+
+## 内容大纲
+
+（待填写）
+
+---
+
+## 学习记录
+
+（待填写）# 沙箱与执行环境 - 源码分析
+
+## 概览
+
+DeerFlow 的沙箱系统提供安全的执行环境和文件操作能力，支持多种隔离级别。
+
+## 源码目录结构
+
+```
+backend/packages/harness/deerflow/sandbox/
+├── sandbox.py              (约100行) ← 沙箱核心接口
+├── sandbox_provider.py     (121行)  ← 沙箱提供者抽象
+├── tools.py                (1804行) ← 沙箱工具（最大文件）
+├── middleware.py           ← 沙箱中间件
+├── search.py               ← 文件搜索
+├── security.py             ← 安全策略
+├── exceptions.py           ← 异常定义
+├── file_operation_lock.py  ← 文件操作锁
+└── local/
+    ← 本地沙箱实现
+```
+
+## Sandbox Provider 抽象 (sandbox_provider.py)
+
+### SandboxProvider ABC
+```python
+class SandboxProvider(ABC):
+    """沙箱提供者抽象基类"""
+    
+    uses_thread_data_mounts: bool = False
+    needs_upload_permission_adjustment: bool = True
+    
+    @abstractmethod
+    def acquire(self, thread_id: str | None = None) -> str:
+        """获取沙箱环境，返回沙箱ID"""
+    
+    @abstractmethod
+    def get(self, sandbox_id: str) -> Sandbox | None:
+        """根据ID获取沙箱实例"""
+    
+    @abstractmethod
+    def release(self, sandbox_id: str) -> None:
+        """释放沙箱环境"""
+    
+    def reset(self) -> None:
+        """清除缓存状态"""
+```
+
+### 提供者管理
+```python
+# 单例模式
+_default_sandbox_provider: SandboxProvider | None = None
+
+def get_sandbox_provider(**kwargs) -> SandboxProvider:
+    """获取沙箱提供者单例"""
+    global _default_sandbox_provider
+    if _default_sandbox_provider is None:
+        config = get_app_config()
+        cls = resolve_class(config.sandbox.use, SandboxProvider)
+        _default_sandbox_provider = cls(**kwargs)
+    return _default_sandbox_provider
+
+def shutdown_sandbox_provider() -> None:
+    """关闭沙箱提供者"""
+```
+
+## Sandbox 核心接口 (sandbox.py)
+
+```python
+class Sandbox:
+    """沙箱环境实例"""
+    
+    sandbox_id: str          # 沙箱唯一ID
+    thread_id: str | None    # 关联的线程ID
+    
+    def execute(self, command: str, cwd: str | None = None) -> str:
+        """执行命令"""
+    
+    def read_file(self, path: str) -> str:
+        """读取文件"""
+    
+    def write_file(self, path: str, content: str) -> None:
+        """写入文件"""
+```
+
+## 沙箱工具 (tools.py) - 1804行核心文件
+
+### 工具定义
+```python
+from langchain.tools import tool
+
+@tool
+def read_file(path: str) -> str:
+    """读取文件内容"""
+    
+@tool  
+def write_file(path: str, content: str) -> None:
+    """写入文件"""
+    
+@tool
+def glob(pattern: str, max_results: int = 200) -> list[str]:
+    """匹配文件模式"""
+    
+@tool
+def grep(pattern: str, path: str, max_results: int = 100) -> list[GrepMatch]:
+    """搜索文件内容"""
+    
+@tool
+def bash(command: str) -> str:
+    """执行Shell命令"""
+```
+
+### 安全策略 (security.py)
+
+```python
+LOCAL_HOST_BASH_DISABLED_MESSAGE = "Host bash execution is disabled in local sandbox mode"
+
+def is_host_bash_allowed() -> bool:
+    """检查是否允许在主机上执行bash"""
+    config = get_app_config()
+    return config.sandbox.allow_host_bash
+
+# 系统路径前缀（安全限制）
+_LOCAL_BASH_SYSTEM_PATH_PREFIXES = (
+    "/bin/",
+    "/usr/bin/",
+    "/usr/sbin/",
+    "/sbin/",
+    "/opt/homebrew/bin/",
+    "/dev/",
+)
+
+# 禁止的命令
+_LOCAL_BASH_ROOT_PATH_COMMANDS = {"awk", "cat", "cp", "find", "grep", "ls", "rm", "sed", ...}
+
+# Shell 分隔符
+_SHELL_COMMAND_SEPARATORS = {";", "&&", "||", "|", "|&", "&", "(", ")"}
+
+# Shell 重定向操作符
+_SHELL_REDIRECTION_OPERATORS = {"<", ">", "<<", ">>", "<<<", "<>", ">&", "<&", "&>", "&>>", ">|"}
+```
+
+### 文件操作锁
+```python
+# file_operation_lock.py
+def get_file_operation_lock() -> asyncio.Lock:
+    """获取文件操作异步锁"""
+    # 防止并发文件操作冲突
+```
+
+### 文件搜索 (search.py)
+
+```python
+@dataclass
+class GrepMatch:
+    """grep 搜索结果"""
+    path: str
+    line_number: int
+    line: str
+    match: str
+
+def search_files(pattern: str, path: str) -> list[str]:
+    """glob 搜索"""
+    
+def grep_content(pattern: str, path: str) -> list[GrepMatch]:
+    """grep 内容搜索"""
+```
+
+## 沙箱类型
+
+### 1. Local Sandbox
+- 直接在主机执行
+- 文件工具映射到线程目录
+- 默认禁用 host bash（安全考虑）
+- 适合可信环境
+
+### 2. Docker Sandbox
+- 每个任务独立容器
+- 完整文件系统隔离
+- 网络隔离（可选）
+- 资源限制（CPU/Memory）
+- 推荐用于生产环境
+
+### 3. Kubernetes Sandbox
+- 通过 provisioner 服务调度
+- K8s Pod 执行
+- 适合大规模分布式部署
+
+## 文件系统映射
+
+### 容器内路径
+```
+/mnt/user-data/
+├── uploads/          ← 用户上传文件
+├── workspace/        ← Agent 工作目录
+├── outputs/          ← 输出结果
+└── skills/           ← 技能文件
+    ├── public/
+    └── custom/
+```
+
+### 虚拟路径
+```python
+VIRTUAL_PATH_PREFIX = "/mnt"
+
+# 路径转换
+def to_container_path(host_path: str) -> str:
+    """主机路径 → 容器路径"""
+    return posixpath.join(VIRTUAL_PATH_PREFIX, host_path.lstrip("/"))
+```
+
+## 中间件集成 (middleware.py)
+
+```python
+class SandboxMiddleware(AgentMiddleware):
+    """沙箱中间件"""
+    
+    def before_tool_call(self, tool_name: str, tool_input: dict) -> dict | None:
+        """工具调用前检查"""
+        # 检查路径安全性
+        # 检查命令安全性
+        # 应用沙箱策略
+```
+
+## 执行流程
+
+```
+工具调用请求 → SandboxMiddleware 检查 → 
+获取 SandboxProvider → acquire沙箱 → 
+执行操作（read/write/bash） → 
+返回结果 → release沙箱
+```
+
+## 安全机制
+
+### 1. 路径安全
+- 禁止路径遍历：检测 `..` 
+- 禁止绝对路径访问系统目录
+- 路径白名单机制
+
+### 2. 命令安全
+- 命令解析和过滤
+- 禁止危险命令（rm -rf /）
+- 禁止管道注入
+- 禁止命令组合攻击
+
+### 3. 资源限制
+- Docker 模式：CPU/Memory 限制
+- 文件大小限制
+- 执行超时控制
+
+### 4. 权限隔离
+- Local: 用户权限
+- Docker: 容器用户（非root）
+- K8s: Pod 安全策略
+
+## 异常处理 (exceptions.py)
+
+```python
+class SandboxError(Exception):
+    """沙箱基础异常"""
+
+class SandboxNotFoundError(SandboxError):
+    """沙箱未找到"""
+
+class SandboxRuntimeError(SandboxError):
+    """沙箱运行时错误"""
+
+class SandboxSecurityError(SandboxError):
+    """沙箱安全错误"""
+```
+
+## 社区扩展
+
+```
+backend/packages/harness/deerflow/community/
+└── aio_sandbox/
+    ← 异步沙箱实现
+    ← 支持 asyncio.to_thread 非阻塞执行
+```
+
+## 配置示例 (config.yaml)
+
+```yaml
+sandbox:
+  use: deerflow.community.aio_sandbox:AioSandboxProvider
+  mode: docker           # local | docker | k8s
+  allow_host_bash: false # Local模式是否允许主机bash
+  docker_image: deer-flow-sandbox:latest
+  resource_limits:
+    cpu: 2
+    memory: 4GB
+```
+
+## 关键代码片段
+
+### 获取沙箱
+```python
+provider = get_sandbox_provider()
+sandbox_id = provider.acquire(thread_id="thread-123")
+sandbox = provider.get(sandbox_id)
+
+# 执行操作
+content = sandbox.read_file("/mnt/workspace/file.txt")
+sandbox.write_file("/mnt/workspace/output.txt", "result")
+
+# 释放沙箱
+provider.release(sandbox_id)
+```
+
+### 安全的bash执行
+```python
+# 安全检查
+if not is_host_bash_allowed():
+    raise SandboxSecurityError(LOCAL_HOST_BASH_DISABLED_MESSAGE)
+
+# 命令解析
+command_parts = parse_command(command)
+if has_dangerous_operations(command_parts):
+    raise SandboxSecurityError("Dangerous command blocked")
+
+# 执行
+result = sandbox.execute(command)
+```
+
+## 设计亮点
+
+### 1. Provider 抽象
+- 统一接口，支持多种实现
+- 单例模式，全局管理
+- 配置驱动，灵活切换
+
+### 2. 多级安全
+- 路径安全检查
+- 命令安全过滤
+- 资源限制
+- 权限隔离
+
+### 3. 异步支持
+- `asyncio.to_thread` 非阻塞
+- 文件操作锁防冲突
+- StreamBridge 实时反馈
+
+### 4. 容器映射
+- 统一虚拟路径 `/mnt/`
+- 技能、工作、输出分离
+- 清晰的目录结构
+
+---
+
+**下一步**: 阅读 memory/updater.py 理解记忆更新机制# 沙箱与执行环境 - 部署体验
+
+**状态**: ⬜ 未开始
+
+**计划开始时间**: 完成阶段2后
+
+---
+
+## 内容大纲
+
+（待填写）
+
+---
+
+## 学习记录
+
+（待填写）

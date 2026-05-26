@@ -1,0 +1,315 @@
+# Agent编排架构 - 架构理解
+
+**状态**: ⬜ 未开始
+
+**计划开始时间**: 完成部署体验后
+
+---
+
+## 内容大纲
+
+（待填写）
+
+---
+
+## 学习记录
+
+（待填写）# DeerFlow 源码结构分析
+
+## 概览
+
+DeerFlow 2.0 的核心代码位于 `backend/packages/harness/deerflow/` 目录，采用模块化设计。
+
+## 源码目录结构
+
+```
+deer-flow/source/backend/packages/harness/deerflow/
+│
+├── agents/                    ← Agent 核心模块
+│   ├── lead_agent/            ← 主代理（Lead Agent）
+│   │   ├── agent.py           ← Agent 创建和配置（494行）
+│   │   └── prompt.py          ← Prompt 模板（约370行）
+│   ├── memory/                ← 记忆系统
+│   └── middlewares/           ← 中间件集合
+│       ├── clarification_middleware.py    ← 澄清请求
+│       ├── loop_detection_middleware.py    ← 循环检测
+│       ├── memory_middleware.py            ← 记忆管理
+│       ├── safety_finish_reason_middleware.py ← 安全结束
+│       ├── subagent_limit_middleware.py    ← 子代理限制
+│       ├── summarization_middleware.py     ← 摘要压缩
+│       ├── title_middleware.py             ← 标题生成
+│       ├── todo_middleware.py              ← TODO管理
+│       ├── token_usage_middleware.py       ← Token统计
+│       └── tool_error_handling_middleware.py ← 工具错误处理
+│       └── view_image_middleware.py        ← 图像查看
+│
+├── subagents/                 ← 子代理（Sub-Agents）模块
+│   ├── executor.py            ← 子代理执行引擎（861行）
+│   ├── config.py              ← 子代理配置
+│   ├── registry.py            ← 子代理注册
+│   ├── token_collector.py     ← Token收集
+│   └── builtins/              ← 内置子代理
+│       ├── general_purpose.py ← 通用子代理
+│       └── bash_agent.py      ← Bash执行代理
+│
+├── tools/                     ← 工具系统
+│   ├── tools.py               ← 工具基类
+│   ├── types.py               ← 工具类型定义
+│   ├── skill_manage_tool.py   ← Skill管理工具
+│   ├── builtins/              ← 内置工具
+│       ├── tool_search.py     ← 工具搜索
+│       ├── task_tool.py       ← 任务管理
+│       ├── clarification_tool.py ← 澄清请求
+│       ├── present_file_tool.py  ← 文件展示
+│       ├── view_image_tool.py    ← 图像查看
+│       └── invoke_acp_agent_tool.py ← ACP代理调用
+│       └── update_agent_tool.py   ← Agent更新
+│       └── setup_agent_tool.py    ← Agent设置
+│
+├── sandbox/                   ← 沙箱执行环境
+│   ├── sandbox.py             ← 沙箱核心接口
+│   ├── sandbox_provider.py    ← 沙箱提供者抽象
+│   ├── tools.py               ← 沙箱工具（文件操作等，约690行）
+│   ├── middleware.py          ← 沙箱中间件
+│   ├── search.py              ← 搜索功能
+│   ├── security.py            ← 安全策略
+│   ├── exceptions.py          ← 异常定义
+│   └── local/                 ← 本地沙箱实现
+│
+├── skills/                    ← 技能系统
+│   ├── types.py               ← Skill类型定义
+│   ├── tool_policy.py         ← 工具策略
+│   └── storage/               ← Skill存储
+│
+├── runtime/                   ← 运行时系统
+│   ├── runs/                  ← 运行管理
+│   │   ├── store/             ← 运行存储
+│   │   └── worker.py          ← 工作线程
+│   ├── checkpointer/          ← 状态检查点
+│   ├── events/                ← 事件系统
+│   ├── store/                 ← 存储抽象
+│   └── stream_bridge/         ← 流式传输桥接
+│
+├── persistence/               ← 数据持久化
+│   ├── models/                ← 数据模型
+│   ├── thread_meta/           ← 线程元数据
+│   ├── user/                  ← 用户数据
+│   ├── feedback/              ← 反馈数据
+│   └── migrations/            ← 数据库迁移
+│
+├── config/                    ← 配置系统
+│   ├── app_config.py          ← 应用配置
+│   ├── model_config.py        ← 模型配置
+│   ├── agents_config.py       ← Agent配置
+│   ├── subagents_config.py    ← 子代理配置
+│   ├── memory_config.py       ← 记忆配置
+│   ├── skills_config.py       ← Skill配置
+│   ├── sandbox_config.py      ← 沙箱配置
+│   └── database_config.py     ← 数据库配置
+│
+├── models/                    ← LLM 模型管理
+│   ├── factory.py             ← 模型工厂
+│   └── providers/             ← 不同Provider实现
+│
+├── mcp/                       ← MCP Server集成
+│
+├── guardrails/                ← 安全护栏
+│   ├── middleware.py          ← 护栏中间件
+│   └── builtin.py             ← 内置护栏
+│
+├── tracing/                   ← 追踪系统（LangSmith/Langfuse）
+│
+├── reflection/                ← 反思机制
+│
+├── utils/                     ← 工具函数
+│
+└── community/                 ← 社区扩展
+    ├── aio_sandbox/           ← 异步沙箱
+    ├── tavily/                ← Tavily搜索
+    ├── serper/                ← Serper搜索
+    ├── ddg_search/            ← DuckDuckGo搜索
+    ├── infoquest/             ← InfoQuest集成
+    ├── exa/                   ← Exa搜索
+    ├── firecrawl/             ← Firecrawl爬虫
+    ├── jina_ai/               ← Jina AI
+    └── image_search/          ← 图像搜索
+```
+
+## 关键模块分析
+
+### 1. Lead Agent (agents/lead_agent/)
+
+**核心文件**: `agent.py` (494行)
+
+**主要职责**:
+- 创建和配置主代理
+- 集成多个中间件（Memory、Summarization、Title等）
+- 处理模型配置和工具绑定
+- 设置追踪回调（LangSmith/Langfuse）
+
+**关键函数**:
+- `make_lead_agent()`: 创建主代理入口
+- `_resolve_model_name()`: 模型名称解析
+- `_create_summarization_middleware()`: 摘要中间件创建
+
+**中间件链**:
+```python
+# 从 agent.py 导入的中间件
+from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
+from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
+from deerflow.agents.middlewares.summarization_middleware import DeerFlowSummarizationMiddleware
+from deerflow.agents.middlewares.title_middleware import TitleMiddleware
+from deerflow.agents.middlewares.todo_middleware import TodoMiddleware
+from deerflow.agents.middlewares.token_usage_middleware import TokenUsageMiddleware
+```
+
+### 2. Sub-Agents Executor (subagents/executor.py)
+
+**核心文件**: `executor.py` (861行)
+
+**主要职责**:
+- 子代理执行引擎
+- 状态管理（PENDING → RUNNING → COMPLETED/FAILED/TIMED_OUT）
+- 并发执行和超时控制
+- Token统计收集
+
+**关键类**:
+- `SubagentStatus`: 子代理状态枚举
+- `SubagentExecutor`: 执行器核心类
+- `SubagentTokenCollector`: Token收集
+
+**执行流程**:
+1. 创建隔离的子代理上下文
+2. 配置子代理模型和工具
+3. 执行任务并监控状态
+4. 收集结果和Token使用
+5. 报告回主代理
+
+### 3. Sandbox (sandbox/)
+
+**核心文件**: `tools.py` (约690行)
+
+**主要职责**:
+- 文件操作工具（读写、搜索）
+- Shell执行工具
+- 安全策略检查
+- 中间件集成
+
+**关键工具**:
+- 文件读写操作
+- 目录搜索
+- Bash命令执行（安全模式）
+- 图像查看
+
+### 4. Runtime (runtime/)
+
+**主要职责**:
+- 运行生命周期管理
+- 状态检查点保存
+- 事件流处理
+- 线程管理
+
+### 5. Tools (tools/)
+
+**核心文件**: `builtins/` 目录
+
+**内置工具**:
+- `tool_search.py`: 工具搜索
+- `task_tool.py`: 任务管理
+- `clarification_tool.py`: 用户澄清请求
+- `present_file_tool.py`: 文件展示
+- `view_image_tool.py`: 图像查看
+- `invoke_acp_agent_tool.py`: ACP代理调用
+
+## 设计模式
+
+### 1. 中间件模式 (Middleware Pattern)
+
+所有中间件继承自 `AgentMiddleware`，可堆叠组合：
+
+```python
+# 中间件链示例
+middlewares = [
+    MemoryMiddleware,
+    SummarizationMiddleware,
+    TitleMiddleware,
+    TokenUsageMiddleware,
+    SubagentLimitMiddleware,
+    LoopDetectionMiddleware,
+    ...
+]
+```
+
+### 2. 工厂模式 (Factory Pattern)
+
+- `make_lead_agent()`: 创建主代理
+- `create_chat_model()`: 创建模型
+- `create_agent()`: LangChain Agent创建
+
+### 3. 状态机模式
+
+子代理使用状态枚举管理生命周期：
+```
+PENDING → RUNNING → COMPLETED/FAILED/CANCELLED/TIMED_OUT
+```
+
+### 4. 提供者模式 (Provider Pattern)
+
+- `SandboxProvider`: 沙箱提供者抽象
+- 支持多种实现：Local、Docker、K8s
+
+## 核心数据流
+
+```
+用户请求
+    ↓
+Gateway (app/gateway/)
+    ↓
+Runtime (runtime/)
+    ↓
+Lead Agent (agents/lead_agent/)
+    ↓
+Middleware Chain (middlewares/)
+    ↓
+[可能触发] Sub-Agents Executor (subagents/)
+    ↓
+Tools (tools/) + Skills (skills/)
+    ↓
+Sandbox (sandbox/)
+    ↓
+结果返回
+```
+
+## 技术栈总结
+
+- **LangChain**: Agent框架基础
+- **LangGraph**: 状态机和执行流（隐含，通过runtime）
+- **FastAPI**: Gateway API服务
+- **Middleware Chain**: 可扩展的处理链
+- **Async/Await**: 异步执行模型
+
+## 下一步学习建议
+
+1. **深入阅读** `agent.py` 理解主代理构建
+2. **分析** `executor.py` 理解子代理调度
+3. **研究** `sandbox/tools.py` 理解沙箱执行
+4. **查看** `middlewares/` 理解各中间件功能
+5. **阅读** `runtime/` 理解运行时管理# Agent编排架构 - 部署体验
+
+**状态**: ⬜ 未开始
+
+**计划开始时间**: 完成阶段0后
+
+---
+
+## 内容大纲
+
+（待填写）
+
+---
+
+## 学习记录
+
+（待填写）
