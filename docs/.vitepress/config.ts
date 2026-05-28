@@ -11,6 +11,12 @@ export default defineConfig({
   lastUpdated: true,
   
   ignoreDeadLinks: true,
+
+  vite: {
+    build: {
+      chunkSizeWarningLimit: 3000,
+    }
+  },
   
   head: [
     ['link', { rel: 'icon', href: '/favicon.ico' }],

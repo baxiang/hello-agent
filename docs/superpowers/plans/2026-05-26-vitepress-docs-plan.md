@@ -454,7 +454,7 @@ Hiclaw 项目文档。
 
 - [ ] **Step 1: 创建 Logo SVG**
 
-```svg
+```text
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <circle cx="50" cy="50" r="45" fill="#4a90d9"/>
   <text x="50" y="55" text-anchor="middle" fill="white" font-size="24" font-weight="bold">HA</text>
@@ -472,7 +472,7 @@ Hiclaw 项目文档。
 
 - [ ] **Step 1: 创建 .gitignore**
 
-```gitignore
+```text
 .vitepress/cache
 .vitepress/dist
 node_modules

@@ -1,0 +1,50 @@
+Python 是一种高级编程语言，以简洁易读著称。
+
+## 基础数据类型
+
+### 列表 (List)
+列表是有序的可变序列，用方括号定义：
+```python
+numbers = [1, 2, 3, 4, 5]
+names = ["张三", "李四", "王五"]
+```
+
+### 字典 (Dict)
+字典是键值对映射，用花括号定义：
+```python
+person = {"name": "张三", "age": 25}
+```
+
+### 元组 (Tuple)
+元组是不可变序列，用圆括号定义：
+```python
+coordinates = (10, 20)
+```
+
+## 控制流
+
+### 条件语句
+```python
+if x > 10:
+    print("大")
+elif x > 5:
+    print("中")
+else:
+    print("小")
+```
+
+### 循环语句
+```python
+for i in range(5):
+    print(i)
+
+while x < 10:
+    x += 1
+```
+
+## 函数
+
+```python
+def greet(name):
+    return f"你好，{name}！"
+```
