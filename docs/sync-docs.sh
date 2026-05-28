@@ -11,16 +11,24 @@ sync_dir() {
   fi
   mkdir -p "$dest"
   rsync -a --delete \
-    --exclude='source' \
-    --exclude='node_modules' \
     --exclude='.git' \
     --exclude='.venv' \
+    --exclude='.ruff_cache' \
     --exclude='__pycache__' \
-    --exclude='uv.lock' \
-    --exclude='*.pyc' \
+    --exclude='node_modules' \
+    --exclude='source' \
+    --include='*/' \
+    --include='*.md' \
+    --include='*.png' \
+    --include='*.jpg' \
+    --include='*.svg' \
+    --include='*.gif' \
+    --exclude='*' \
     "$src" "$dest"
-  rm -f "$dest/index.md"
-  cp "$index_src" "$dest/index.md"
+  if [ -f "$index_src" ]; then
+    rm -f "$dest/index.md"
+    cp "$index_src" "$dest/index.md"
+  fi
 }
 
 echo "Syncing adk-go docs..."
