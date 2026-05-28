@@ -55,6 +55,7 @@ export default defineConfig({
         items: [
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
+          { text: 'Langfuse', link: '/langfuse/' },
           { text: 'Hiclaw', link: '/hiclaw/' },
         ]
       },
@@ -274,6 +275,32 @@ export default defineConfig({
             { text: 'IO 模式', link: '/eino/go-fundamentals/07-io-pattern' },
             { text: '反射', link: '/eino/go-fundamentals/08-reflection' },
             { text: '结构体嵌入与标签', link: '/eino/go-fundamentals/09-struct-embedding-tags' },
+          ]
+        }
+      ],
+      '/langfuse/': [
+        {
+          text: '入门',
+          items: [
+            { text: '概览', link: '/langfuse/00-overview' },
+            { text: '架构', link: '/langfuse/01-architecture' },
+            { text: '快速开始', link: '/langfuse/02-quickstart' },
+          ]
+        },
+        {
+          text: '核心模块',
+          items: [
+            { text: '数据模型', link: '/langfuse/package-docs/data-model' },
+            { text: '摄取管道', link: '/langfuse/package-docs/ingestion-pipeline' },
+            { text: '评估系统', link: '/langfuse/package-docs/evaluation' },
+            { text: 'Prompt 管理', link: '/langfuse/package-docs/prompt-management' },
+          ]
+        },
+        {
+          text: '集成与部署',
+          items: [
+            { text: 'SDK 集成', link: '/langfuse/package-docs/sdk-integration' },
+            { text: '基础设施', link: '/langfuse/package-docs/infrastructure' },
           ]
         }
       ],

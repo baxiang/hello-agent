@@ -58,4 +58,7 @@ sync_dir "$BASE_DIR/langchain/" "$DOCS_DIR/langchain/" "$DOCS_DIR/langchain/READ
 echo "Syncing langchaingo docs..."
 sync_dir "$BASE_DIR/langchaingo/docs/" "$DOCS_DIR/langchaingo/" "$DOCS_DIR/langchaingo/README.md"
 
+echo "Syncing langfuse docs..."
+sync_dir "$BASE_DIR/langfuse/docs/" "$DOCS_DIR/langfuse/" "$DOCS_DIR/langfuse/README.md"
+
 echo "Done! All docs synced."

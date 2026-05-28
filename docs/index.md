@@ -50,6 +50,10 @@ features:
     title: MCP 协议
     details: Anthropic Model Context Protocol，LLM 工具调用标准
     link: /mcp/
+  - icon: 🔍
+    title: Langfuse
+    details: 开源 LLM 工程平台，Tracing/Evaluation/Prompt 管理
+    link: /langfuse/
   - icon: 🦌
     title: DeerFlow
     details: 字节跳动 Super Agent Harness，子代理+沙箱+技能
