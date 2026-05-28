@@ -37,13 +37,17 @@ export default defineConfig({
       {
         text: 'Python 框架',
         items: [
+          { text: 'LangChain', link: '/langchain/' },
+          { text: 'PydanticAI', link: '/pydantic-ai/' },
           { text: 'DeerFlow', link: '/deer-flow/' },
           { text: 'AgentScope Python', link: '/agentscope/' },
         ]
       },
       {
-        text: '更多项目',
+        text: '协议与平台',
         items: [
+          { text: 'A2A 协议', link: '/a2a/' },
+          { text: 'MCP 协议', link: '/mcp/' },
           { text: 'Hiclaw', link: '/hiclaw/' },
         ]
       },
@@ -261,6 +265,139 @@ export default defineConfig({
           items: [
             { text: '架构总览', link: '/hiclaw/architecture/README' },
             { text: '完整架构分析', link: '/hiclaw/architecture/full-review' },
+          ]
+        }
+      ],
+      '/a2a/': [
+        {
+          text: 'A2A 协议',
+          items: [
+            { text: '从零理解 A2A', link: '/a2a/00-a2a-from-zero' },
+            { text: 'Agent 发现与名片', link: '/a2a/01-agent-discovery-card' },
+            { text: '消息与任务模型', link: '/a2a/02-message-task-model' },
+            { text: '协议方法', link: '/a2a/03-protocol-methods' },
+            { text: '安全架构', link: '/a2a/04-security-architecture' },
+            { text: '实现指南', link: '/a2a/05-implementation-guide' },
+          ]
+        }
+      ],
+      '/mcp/': [
+        {
+          text: 'MCP 协议',
+          items: [
+            { text: '从零理解 MCP', link: '/mcp/00-mcp-from-zero' },
+            { text: '协议架构', link: '/mcp/01-protocol-architecture' },
+            { text: 'Server 能力', link: '/mcp/02-server-capabilities' },
+            { text: 'Client 能力', link: '/mcp/03-client-capabilities' },
+            { text: '传输与安全', link: '/mcp/04-transports-security' },
+            { text: '实现指南', link: '/mcp/05-implementation-guide' },
+          ]
+        }
+      ],
+      '/pydantic-ai/': [
+        {
+          text: 'PydanticAI',
+          items: [
+            { text: '从零理解 PydanticAI', link: '/pydantic-ai/00-pydantic-ai-from-zero' },
+            { text: 'Agent 核心', link: '/pydantic-ai/01-agent-core' },
+            { text: '结构化输出', link: '/pydantic-ai/02-structured-output' },
+            { text: '工具与依赖', link: '/pydantic-ai/03-tools-deps' },
+            { text: '流式与可观测性', link: '/pydantic-ai/04-streaming-observability-evals' },
+            { text: 'MCP/A2A 与生产', link: '/pydantic-ai/05-mcp-a2a-production' },
+          ]
+        }
+      ],
+      '/langchain/': [
+        {
+          text: 'LangChain 入门',
+          items: [
+            { text: '模型基础', link: '/langchain/01-LangChain入门/01-模型基础' },
+            { text: '消息系统', link: '/langchain/01-LangChain入门/02-消息系统' },
+            { text: '流式与批量', link: '/langchain/01-LangChain入门/03-流式与批量' },
+            { text: '工具调用', link: '/langchain/01-LangChain入门/04-工具调用' },
+            { text: '结构化输出', link: '/langchain/01-LangChain入门/05-结构化输出' },
+            { text: '提示工程', link: '/langchain/01-LangChain入门/06-提示工程' },
+            { text: '入门实战', link: '/langchain/01-LangChain入门/07-入门实战' },
+          ]
+        },
+        {
+          text: 'LangGraph 入门',
+          items: [
+            { text: '图基础概念', link: '/langchain/02-LangGraph入门/01-图基础概念' },
+            { text: 'State 与 Reducers', link: '/langchain/02-LangGraph入门/02-State与Reducers' },
+            { text: 'Nodes 节点', link: '/langchain/02-LangGraph入门/03-Nodes节点' },
+            { text: 'Edges 路由', link: '/langchain/02-LangGraph入门/04-Edges路由' },
+            { text: 'Send 与 Command', link: '/langchain/02-LangGraph入门/05-Send与Command' },
+            { text: '运行时上下文', link: '/langchain/02-LangGraph入门/06-运行时上下文' },
+            { text: '可视化与调试', link: '/langchain/02-LangGraph入门/07-可视化与调试' },
+            { text: '入门实战', link: '/langchain/02-LangGraph入门/08-入门实战' },
+          ]
+        },
+        {
+          text: 'Agent 入门',
+          items: [
+            { text: '工具定义', link: '/langchain/03-Agent入门/01-工具定义' },
+            { text: '工具上下文', link: '/langchain/03-Agent入门/02-工具上下文' },
+            { text: '创建 Agent', link: '/langchain/03-Agent入门/03-创建Agent' },
+            { text: '系统提示词', link: '/langchain/03-Agent入门/04-系统提示词' },
+            { text: 'ReAct 循环', link: '/langchain/03-Agent入门/05-ReAct循环' },
+            { text: '结构化输出', link: '/langchain/03-Agent入门/06-结构化输出' },
+            { text: '内存管理', link: '/langchain/03-Agent入门/07-内存管理' },
+            { text: 'Agent 实战', link: '/langchain/03-Agent入门/08-Agent实战' },
+          ]
+        },
+        {
+          text: 'LangChain 进阶',
+          items: [
+            { text: '中间件概述', link: '/langchain/04-LangChain进阶/01-中间件概述' },
+            { text: '自定义中间件', link: '/langchain/04-LangChain进阶/02-自定义中间件' },
+            { text: '上下文工程', link: '/langchain/04-LangChain进阶/03-上下文工程' },
+            { text: 'RAG 架构', link: '/langchain/04-LangChain进阶/04-RAG架构' },
+            { text: '动态模型选择', link: '/langchain/04-LangChain进阶/05-动态模型选择' },
+            { text: '动态工具选择', link: '/langchain/04-LangChain进阶/06-动态工具选择' },
+            { text: '流式输出', link: '/langchain/04-LangChain进阶/08-流式输出' },
+            { text: '进阶实战', link: '/langchain/04-LangChain进阶/09-进阶实战' },
+          ]
+        },
+        {
+          text: 'LangGraph 进阶',
+          items: [
+            { text: '记忆管理', link: '/langchain/05-LangGraph进阶/01-记忆管理' },
+            { text: '长期记忆', link: '/langchain/05-LangGraph进阶/02-长期记忆' },
+            { text: '中断与审核', link: '/langchain/05-LangGraph进阶/03-中断与审核' },
+            { text: '多中断处理', link: '/langchain/05-LangGraph进阶/04-多中断处理' },
+            { text: '持久化', link: '/langchain/05-LangGraph进阶/05-持久化' },
+            { text: '子图架构', link: '/langchain/05-LangGraph进阶/06-子图架构' },
+            { text: 'Map-Reduce', link: '/langchain/05-LangGraph进阶/07-Map-Reduce模式' },
+            { text: '进阶实战', link: '/langchain/05-LangGraph进阶/09-进阶实战' },
+          ]
+        },
+        {
+          text: 'Agent 实战',
+          items: [
+            { text: '多 Agent 协作', link: '/langchain/06-Agent实战/01-多Agent协作' },
+            { text: '中间件扩展', link: '/langchain/06-Agent实战/02-中间件扩展' },
+            { text: '上下文工程实战', link: '/langchain/06-Agent实战/03-上下文工程实战' },
+            { text: 'Guardrails', link: '/langchain/06-Agent实战/04-Guardrails与安全' },
+            { text: '流式部署', link: '/langchain/06-Agent实战/05-流式部署' },
+            { text: '生产部署', link: '/langchain/06-Agent实战/06-生产部署' },
+            { text: '可观测性', link: '/langchain/06-Agent实战/07-可观测性' },
+            { text: '实战项目合集', link: '/langchain/06-Agent实战/08-实战项目合集' },
+          ]
+        },
+        {
+          text: 'DeepAgents',
+          items: [
+            { text: '概述与快速入门', link: '/langchain/07-DeepAgents篇/01-概述与快速入门' },
+            { text: '模型与工具配置', link: '/langchain/07-DeepAgents篇/02-模型与工具配置' },
+            { text: '虚拟文件系统', link: '/langchain/07-DeepAgents篇/03-虚拟文件系统与后端' },
+            { text: '子代理架构', link: '/langchain/07-DeepAgents篇/04-子代理架构' },
+            { text: '上下文工程', link: '/langchain/07-DeepAgents篇/05-上下文工程' },
+            { text: 'Skills 技能系统', link: '/langchain/07-DeepAgents篇/06-Skills技能系统' },
+            { text: '权限控制与安全', link: '/langchain/07-DeepAgents篇/07-权限控制与安全' },
+            { text: '沙箱执行环境', link: '/langchain/07-DeepAgents篇/08-沙箱执行环境' },
+            { text: '人类审核', link: '/langchain/07-DeepAgents篇/09-人类审核' },
+            { text: '生产部署', link: '/langchain/07-DeepAgents篇/10-生产部署' },
           ]
         }
       ],

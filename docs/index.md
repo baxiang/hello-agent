@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: 开始学习
-      link: /adk-go/
+      link: /langchain/
     - theme: alt
       text: GitHub
       link: https://github.com/baxiang/hello-agent
@@ -27,15 +27,31 @@ features:
     details: 阿里开源 Java Agent 框架，Reactor 响应式 + sealed 类型
     link: /agentscope/java/
   - icon: 🐍
+    title: LangChain
+    details: LangChain + LangGraph + Agent 全栈教程，57 篇深度文档
+    link: /langchain/
+  - icon: 🛡️
+    title: PydanticAI
+    details: 基于 Pydantic 的类型安全 Agent 框架
+    link: /pydantic-ai/
+  - icon: 🐍
     title: AgentScope Python
     details: 阿里开源 Python 多智能体框架，分布式+WebUI
     link: /agentscope/
+  - icon: 🤝
+    title: A2A 协议
+    details: Google Agent-to-Agent 协议，跨框架 Agent 互操作
+    link: /a2a/
+  - icon: 🔌
+    title: MCP 协议
+    details: Anthropic Model Context Protocol，LLM 工具调用标准
+    link: /mcp/
   - icon: 🦌
     title: DeerFlow
     details: 字节跳动 Super Agent Harness，子代理+沙箱+技能
     link: /deer-flow/
   - icon: ⚖️
     title: Hiclaw
-    details: 法律 AI 系统，Controller-Manager-Worker 架构
+    details: 协作多 Agent 操作系统，Manager-Workers + Kubernetes
     link: /hiclaw/
 ---

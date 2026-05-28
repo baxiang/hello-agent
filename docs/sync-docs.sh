@@ -23,4 +23,24 @@ rsync -a --delete "$BASE_DIR/hiclaw/docs/" "$DOCS_DIR/hiclaw/"
 rm -f "$DOCS_DIR/hiclaw/index.md"
 cp "$DOCS_DIR/hiclaw/learning/README.md" "$DOCS_DIR/hiclaw/index.md"
 
+echo "Syncing a2a docs..."
+rsync -a --delete --exclude='source' "$BASE_DIR/a2a/" "$DOCS_DIR/a2a/"
+rm -f "$DOCS_DIR/a2a/index.md"
+cp "$DOCS_DIR/a2a/README.md" "$DOCS_DIR/a2a/index.md"
+
+echo "Syncing mcp docs..."
+rsync -a --delete --exclude='source' "$BASE_DIR/mcp/" "$DOCS_DIR/mcp/"
+rm -f "$DOCS_DIR/mcp/index.md"
+cp "$DOCS_DIR/mcp/README.md" "$DOCS_DIR/mcp/index.md"
+
+echo "Syncing pydantic-ai docs..."
+rsync -a --delete --exclude='source' "$BASE_DIR/pydantic-ai/" "$DOCS_DIR/pydantic-ai/"
+rm -f "$DOCS_DIR/pydantic-ai/index.md"
+cp "$DOCS_DIR/pydantic-ai/README.md" "$DOCS_DIR/pydantic-ai/index.md"
+
+echo "Syncing langchain docs..."
+rsync -a --delete --exclude='source' "$BASE_DIR/langchain/" "$DOCS_DIR/langchain/"
+rm -f "$DOCS_DIR/langchain/index.md"
+cp "$DOCS_DIR/langchain/README.md" "$DOCS_DIR/langchain/index.md"
+
 echo "Done! All docs synced."
