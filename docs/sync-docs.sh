@@ -10,7 +10,15 @@ sync_dir() {
     return 0
   fi
   mkdir -p "$dest"
-  rsync -a --delete --exclude='source' --exclude='node_modules' --exclude='.git' "$src" "$dest"
+  rsync -a --delete \
+    --exclude='source' \
+    --exclude='node_modules' \
+    --exclude='.git' \
+    --exclude='.venv' \
+    --exclude='__pycache__' \
+    --exclude='uv.lock' \
+    --exclude='*.pyc' \
+    "$src" "$dest"
   rm -f "$dest/index.md"
   cp "$index_src" "$dest/index.md"
 }
