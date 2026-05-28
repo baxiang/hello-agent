@@ -18,4 +18,9 @@ rsync -a --delete "$BASE_DIR/agentscope-java/docs/" "$DOCS_DIR/agentscope/java/"
 rm -f "$DOCS_DIR/agentscope/java/index.md"
 cp "$DOCS_DIR/agentscope/java/README.md" "$DOCS_DIR/agentscope/java/index.md"
 
+echo "Syncing hiclaw docs..."
+rsync -a --delete "$BASE_DIR/hiclaw/docs/" "$DOCS_DIR/hiclaw/"
+rm -f "$DOCS_DIR/hiclaw/index.md"
+cp "$DOCS_DIR/hiclaw/learning/README.md" "$DOCS_DIR/hiclaw/index.md"
+
 echo "Done! All docs synced."

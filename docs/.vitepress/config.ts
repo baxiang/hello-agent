@@ -239,16 +239,28 @@ export default defineConfig({
       ],
       '/hiclaw/': [
         {
-          text: 'Hiclaw 学习笔记',
+          text: '入门',
           items: [
             { text: '概览', link: '/hiclaw/learning/01-hiclaw-overview' },
             { text: '架构', link: '/hiclaw/learning/02-architecture' },
             { text: '部署', link: '/hiclaw/learning/03-deployment' },
+          ]
+        },
+        {
+          text: '核心组件',
+          items: [
             { text: 'Controller', link: '/hiclaw/learning/04-controller' },
             { text: 'Manager', link: '/hiclaw/learning/05-manager' },
             { text: 'Worker', link: '/hiclaw/learning/06-worker' },
             { text: '基础设施', link: '/hiclaw/learning/07-infrastructure' },
             { text: '知识要求', link: '/hiclaw/learning/08-knowledge-requirements' },
+          ]
+        },
+        {
+          text: '架构详解',
+          items: [
+            { text: '架构总览', link: '/hiclaw/architecture/README' },
+            { text: '完整架构分析', link: '/hiclaw/architecture/full-review' },
           ]
         }
       ],
