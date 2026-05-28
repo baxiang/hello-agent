@@ -35,7 +35,7 @@ type Service interface {
 type SaveRequest struct {
     AppName, UserID, SessionID, FileName string
     Part    *genai.Part  // 制品内容（文本或二进制数据）
-    Version int64        // 可选，指定版本号；为空时自动递增
+    Version int64        // 可选，指定版本号；为0时自动创建新版本
 }
 ```
 

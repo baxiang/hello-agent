@@ -189,9 +189,9 @@ type Config struct {
 开发模式 Launcher，包含所有运行方式：
 
 - **console**：终端交互模式
-- **restapi**：REST API 服务
+- **api**：REST API 服务
 - **a2a**：A2A 协议服务
-- **webui**：Web UI 界面（可独立运行，或与 restapi/a2a 共存）
+- **webui**：Web UI 界面（可独立运行，或与 api/a2a 共存）
 
 ```go
 l := full.NewLauncher()
@@ -202,7 +202,7 @@ l.Execute(ctx, config, os.Args[1:])
 
 生产模式 Launcher，仅包含生产所需的服务接口：
 
-- **restapi**：REST API 服务
+- **api**：REST API 服务
 - **a2a**：A2A 协议服务
 
 不包含 console 和 webui，适合最小化部署：

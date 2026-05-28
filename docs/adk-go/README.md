@@ -1,6 +1,6 @@
 # ADK-Go 技术工程代码学习文档
 
-本文档系列基于 [google/adk-go](https://github.com/google/adk-go) 源码（v1.3.0）编写，旨在帮助 Go 开发者系统性地学习和掌握 ADK-Go 这一开源 AI Agent 开发工具包。
+本文档系列基于 [google/adk-go](https://github.com/google/adk-go) 源码（v1.2.0）编写，旨在帮助 Go 开发者系统性地学习和掌握 ADK-Go 这一开源 AI Agent 开发工具包。
 
 源码位置：`../source/`（已克隆到本目录同级位置）
 
@@ -45,13 +45,24 @@
 |---|------|------|
 | 13 | [示例代码导读](./13-examples-walkthrough.md) | examples/ 目录全部示例的逐一介绍 |
 
+### Go 前置知识详解（go-fundamentals/）
+
+| # | 文档 | 说明 |
+|---|------|------|
+| 01 | [迭代器 iter.Seq2](./go-fundamentals/01-iterators.md) | Go 1.23 迭代器协议、Agent.Run 返回值、yield 机制 |
+| 02 | [接口与组合](./go-fundamentals/02-interfaces-composition.md) | Agent 接口、密封模式、agent.New() 构造器、接口嵌套 |
+| 03 | [函数选项模式](./go-fundamentals/03-functional-options.md) | Config+Option 混合模式、RunOption、WithStateDelta |
+| 04 | [genai.Content 多模态消息](./go-fundamentals/04-genai-content.md) | genai 包、Content/Part 结构、FunctionCall/Response |
+| 05 | [Context 与 State](./go-fundamentals/05-context-state.md) | InvocationContext、session.State、作用域前缀、StateDelta |
+| 06 | [错误处理](./go-fundamentals/06-error-handling.md) | iter.Seq2 错误传播、Plugin 错误回调、RetryAndReflect |
+
 ## 学习路径建议
 
 **新手路径**（约 2-3 小时）：
-- 00 总览 → 02 快速入门 → 03 Agent → 06 工具 → 13 示例
+- Go 前置知识 → 00 总览 → 02 快速入门 → 03 Agent → 06 工具 → 13 示例
 
 **系统学习路径**（约 1-2 天）：
-- 按文档编号 00 → 13 顺序阅读，配合源码阅读
+- Go 前置知识 → 按文档编号 00 → 13 顺序阅读，配合源码阅读
 
 **部署路径**（已熟悉概念，需要部署）：
 - 11 服务化部署 → 12 可观测性 → 13 示例（rest/a2a/agentengine）
@@ -78,7 +89,7 @@
 
 ## 版本说明
 
-- ADK-Go 版本：v1.3.0（2026-05-19）
+- ADK-Go 版本：v1.2.0
 - Go 模块：`google.golang.org/adk`
 - 许可证：Apache 2.0
 - 文档编写日期：2026-05-26

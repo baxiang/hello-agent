@@ -153,7 +153,7 @@ type MessageOutputPart struct {
 
 ### 1.7 消息构造函数
 
-Eino 提供便捷的消息构造函数（`schema/message.go:1104-1155`）：
+Eino 提供便捷的消息构造函数（`schema/message.go:1103-1155`）：
 
 ```go
 // 系统消息
@@ -179,7 +179,7 @@ toolMsg := schema.ToolMessage(`{"temp": 25}`, "call_abc123",
 | 格式 | 说明 |
 |------|------|
 | `FString` | Python 风格格式化 `{variable}`，基于 PEP 3101 |
-| `GoTemplate` | Go 标准模板 <span v-pre>`{{.variable}}`</span> |
+| `GoTemplate` | Go 标准模板 `\{\{.variable}}` |
 | `Jinja2` | Jinja2 模板 `{% ... %}` |
 
 #### MessagesTemplate 接口

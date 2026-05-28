@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-ADK-Go（Agent Development Kit for Go）是 Google 开源的语言优先（Language-First）Go AI Agent 开发工具包，当前版本 v1.3.0，采用 Apache 2.0 许可证发布。它为开发者提供了一套完整的框架，用于构建、组合和部署基于大语言模型（LLM）的智能体应用。
+ADK-Go（Agent Development Kit for Go）是 Google 开源的语言优先（Language-First）Go AI Agent 开发工具包，当前版本 v1.2.0，采用 Apache 2.0 许可证发布。它为开发者提供了一套完整的框架，用于构建、组合和部署基于大语言模型（LLM）的智能体应用。
 
 ADK-Go 的核心目标是让 Go 开发者能够以惯用的 Go 风格来构建 AI Agent，而非简单地将 Python 版本的概念翻译过来。项目充分利用了 Go 1.23+ 引入的迭代器协议（`iter.Seq2`）、接口组合等语言特性，使得 Agent 的定义与编排既类型安全又富有表现力。
 

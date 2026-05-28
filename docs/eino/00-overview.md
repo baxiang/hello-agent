@@ -109,7 +109,7 @@ msg := &schema.Message{
 
 ```go
 // 组件接口速览
-model.BaseChatModel      // Generate + Stream（components/model/interface.go:36）
+model.BaseChatModel      // Generate + Stream（components/model/interface.go:71，类型别名 = BaseModel[*Message]）
 tool.InvokableTool       // Info + InvokableRun（components/tool/interface.go:42）
 prompt.ChatTemplate      // Format（components/prompt/interface.go:43）
 retriever.Retriever      // Retrieve
@@ -228,7 +228,7 @@ type TypedAgent[M MessageType] interface {
 |------|------|
 | **ChatModelAgent** | 基于 ChatModel 的 ReAct Agent（`adk/chatmodel.go:457`） |
 | **Runner** | Agent 执行入口，管理生命周期和检查点（`adk/runner.go:55`） |
-| **AgentTool** | 将 Agent 包装为工具，实现多 Agent 协作（`adk/agent_tool.go:69`） |
+| **NewAgentTool** | 将 Agent 包装为工具，实现多 Agent 协作（`adk/agent_tool.go:93`） |
 | **Middleware** | 拦截器模式，支持重试/降级/日志等横切关注点（`adk/middlewares/`） |
 | **Prebuilt Agents** | 预构建 Agent：Deep、PlanExecute、Supervisor（`adk/prebuilt/`） |
 

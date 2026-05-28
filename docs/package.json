@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "docs:dev": "vitepress dev",
-    "docs:build": "vitepress build",
+    "docs:sync": "bash sync-docs.sh",
+    "docs:dev": "bash sync-docs.sh && vitepress dev",
+    "docs:build": "bash sync-docs.sh && vitepress build",
     "docs:preview": "vitepress preview"
   },
   "devDependencies": {

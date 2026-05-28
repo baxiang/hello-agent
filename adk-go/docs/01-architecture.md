@@ -145,6 +145,10 @@ classDiagram
         +Artifacts() Artifacts
         +Memory() Memory
         +UserContent() *genai.Content
+        +InvocationID() string
+        +Branch() string
+        +RunConfig() RunConfig
+        +WithContext(ctx) InvocationContext
         +EndInvocation()
         +Ended() bool
     }
@@ -154,6 +158,11 @@ classDiagram
         +UserContent() *genai.Content
         +ReadonlyState() ReadonlyState
         +AgentName() string
+        +InvocationID() string
+        +UserID() string
+        +AppName() string
+        +SessionID() string
+        +Branch() string
     }
 
     class CallbackContext {
@@ -191,6 +200,7 @@ classDiagram
         +UserID() string
         +State() State
         +Events() Events
+        +LastUpdateTime() time.Time
     }
 
     InvocationContext --|> context.Context : embeds
