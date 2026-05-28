@@ -18,6 +18,10 @@ features:
     title: ADK-Go
     details: Google 开源 Go Agent 开发套件，迭代器+Channel 驱动
     link: /adk-go/
+  - icon: 🦫
+    title: LangChainGo
+    details: Go 版 LangChain，Chain/Agent/Memory/VectorStore 全栈
+    link: /langchaingo/
   - icon: 🔗
     title: Eino
     details: 字节跳动 CloudWeGo 团队开源 Go LLM 应用框架，泛型+流式

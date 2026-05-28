@@ -55,4 +55,7 @@ sync_dir "$BASE_DIR/pydantic-ai/" "$DOCS_DIR/pydantic-ai/" "$DOCS_DIR/pydantic-a
 echo "Syncing langchain docs..."
 sync_dir "$BASE_DIR/langchain/" "$DOCS_DIR/langchain/" "$DOCS_DIR/langchain/README.md"
 
+echo "Syncing langchaingo docs..."
+sync_dir "$BASE_DIR/langchaingo/docs/" "$DOCS_DIR/langchaingo/" "$DOCS_DIR/langchaingo/README.md"
+
 echo "Done! All docs synced."

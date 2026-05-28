@@ -31,6 +31,7 @@ export default defineConfig({
         text: 'Go 框架',
         items: [
           { text: 'ADK-Go', link: '/adk-go/' },
+          { text: 'LangChainGo', link: '/langchaingo/' },
           { text: 'Eino', link: '/eino/' },
         ]
       },
@@ -200,6 +201,35 @@ export default defineConfig({
             { text: '服务', link: '/agentscope/learning/08-service' },
             { text: 'WebUI', link: '/agentscope/learning/09-webui' },
             { text: '知识', link: '/agentscope/learning/10-knowledge' },
+          ]
+        }
+      ],
+      '/langchaingo/': [
+        {
+          text: '入门',
+          items: [
+            { text: '概览', link: '/langchaingo/00-overview' },
+            { text: '架构', link: '/langchaingo/01-architecture' },
+            { text: '快速开始', link: '/langchaingo/02-quickstart' },
+          ]
+        },
+        {
+          text: '核心模块',
+          items: [
+            { text: 'LLM 模型层', link: '/langchaingo/package-docs/llms' },
+            { text: 'Chain 编排', link: '/langchaingo/package-docs/chains' },
+            { text: 'Agent 体系', link: '/langchaingo/package-docs/agents' },
+            { text: '工具系统', link: '/langchaingo/package-docs/tools' },
+            { text: '记忆系统', link: '/langchaingo/package-docs/memory' },
+            { text: 'Prompt 模板', link: '/langchaingo/package-docs/prompts' },
+          ]
+        },
+        {
+          text: '扩展模块',
+          items: [
+            { text: '向量存储与嵌入', link: '/langchaingo/package-docs/embeddings-vectorstores' },
+            { text: 'Callback 回调', link: '/langchaingo/package-docs/callbacks' },
+            { text: 'OutputParser', link: '/langchaingo/package-docs/outputparser' },
           ]
         }
       ],
