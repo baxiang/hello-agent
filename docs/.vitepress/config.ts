@@ -110,7 +110,7 @@ export default defineConfig({
         {
           text: 'Go 前置知识',
           items: [
-            { text: '迭代器与 Pull 模式', link: '/adk-go/go-fundamentals/01-iterators' },
+            { text: 'Go 迭代器从零精通', link: '/adk-go/go-fundamentals/01-iterators' },
             { text: '接口与组合', link: '/adk-go/go-fundamentals/02-interfaces-composition' },
             { text: '函数选项模式', link: '/adk-go/go-fundamentals/03-functional-options' },
             { text: 'genai 内容类型', link: '/adk-go/go-fundamentals/04-genai-content' },
