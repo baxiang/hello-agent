@@ -323,7 +323,23 @@ statelessAgent, _ := llmagent.New(llmagent.Config{
 
 ## 4. Workflow Agents
 
-Workflow Agent 用于编排多个子 Agent 的执行流程，本身不直接处理 LLM 调用，而是协调子 Agent 的执行顺序与方式。
+Workflow Agent 是**不使用 LLM 做决策的编排器**——执行逻辑是确定性的。三种类型可以自由组合。
+
+### 多 Agent 状态传递机制
+
+Workflow Agent 中子 Agent 之间通过 `OutputKey` + 模板变量 `{key}` 传递数据：
+
+```
+Agent A（OutputKey: "code"）→ session.state["code"] = "func main() {...}"
+                                    ↓
+Agent B（Instruction: "审查这段代码：{code}"）→ 读取 session.state["code"]
+```
+
+工作原理：
+1. Agent A 设置 `OutputKey: "code"`，执行完成后自动把 LLM 的最终回复存入 `session.state["code"]`
+2. Agent B 的 `Instruction` 中使用 `{code}` 模板变量，运行时自动替换
+
+> SequentialAgent 和 LoopAgent 的子 Agent 共享同一个 InvocationContext，状态传递非常自然。ParallelAgent 的每个子 Agent 有独立的 branch，但共享 `session.state`。
 
 ### SequentialAgent
 
@@ -343,6 +359,75 @@ seqAgent, err := sequentialagent.New(sequentialagent.Config{
 - 子 Agent 按列表顺序逐一执行，前一个完成后才开始下一个
 - 支持 Live 模式：`RunLive()` 为每个子 Agent 创建独立的 LiveSession，并通过 `sequentialLiveSession` 管理活跃会话的切换
 - 自动注入 `task_completed` 工具到子 LLMAgent 中，使其能主动发出完成信号，便于流程推进
+
+#### 实战：代码开发流水线
+
+**场景**：写代码 → 审查代码 → 重构代码，三步自动化流水线。
+
+```go
+// 第一步：代码生成 Agent
+writer, _ := llmagent.New(llmagent.Config{
+    Name:        "CodeWriter",
+    Model:       model,
+    Instruction: `你是一个 Go 代码生成器。根据用户需求编写 Go 代码。
+只输出完整的 Go 代码块，用 ` + "```go" + ` ... ` + "```" + ` 包裹。不要添加其他文字。`,
+    OutputKey:   "generated_code",  // 输出存入 state["generated_code"]
+})
+
+// 第二步：代码审查 Agent（读取上一步的输出）
+reviewer, _ := llmagent.New(llmagent.Config{
+    Name:  "CodeReviewer",
+    Model: model,
+    Instruction: `你是一个资深 Go 代码审查专家。审查以下代码，指出问题和改进建议。
+
+代码：
+` + "```go" + `
+{generated_code}
+` + "```" + `
+
+请列出具体的问题和修改建议。`,
+    OutputKey: "review_comments",
+})
+
+// 第三步：代码重构 Agent（读取前两步的输出）
+refactorer, _ := llmagent.New(llmagent.Config{
+    Name:  "CodeRefactorer",
+    Model: model,
+    Instruction: `你是一个代码重构专家。根据审查意见重构代码。
+
+原始代码：
+` + "```go" + `
+{generated_code}
+` + "```" + `
+
+审查意见：
+{review_comments}
+
+请输出重构后的完整代码。`,
+    OutputKey: "refactored_code",
+})
+
+// 组装流水线：写 → 审 → 改
+pipeline, _ := sequentialagent.New(sequentialagent.Config{
+    AgentConfig: agent.Config{
+        Name:        "code_pipeline",
+        Description: "代码开发流水线：生成 → 审查 → 重构",
+        SubAgents:   []agent.Agent{writer, reviewer, refactorer},
+    },
+})
+```
+
+**数据流**：
+
+```
+用户："写一个 HTTP 服务器"
+    ↓
+CodeWriter → state["generated_code"] = "func main() { http.ListenAndServe(...) }"
+    ↓
+CodeReviewer 读取 {generated_code} → state["review_comments"] = "1. 缺少错误处理 2. ..."
+    ↓
+CodeRefactorer 读取 {generated_code} + {review_comments} → state["refactored_code"] = "..."
+```
 
 ### ParallelAgent
 
@@ -364,6 +449,80 @@ parAgent, err := parallelagent.New(parallelagent.Config{
 - 事件通过 `resultsChan` 收集，支持 ack 机制保证事件按序持久化
 - 任一子 Agent 出错，errgroup 传播错误
 
+> ⚠️ **重要**：并行子 Agent 必须使用**不同的 OutputKey**，否则会竞态写入同一个 state key。
+
+#### 实战：并行调研 + 汇总
+
+**场景**：三个研究员同时调研不同主题，最后由合成 Agent 汇总。
+
+```go
+// 并行调研（每个 Agent 用不同的 OutputKey）
+energyResearcher, _ := llmagent.New(llmagent.Config{
+    Name:        "RenewableEnergyResearcher",
+    Model:       model,
+    Instruction: "你是一个能源领域研究员。调研可再生能源最新进展。",
+    OutputKey:   "energy_result",  // 注意不同的 key
+})
+
+evResearcher, _ := llmagent.New(llmagent.Config{
+    Name:        "EVResearcher",
+    Model:       model,
+    Instruction: "你是电动汽车领域研究员。调研 EV 技术最新趋势。",
+    OutputKey:   "ev_result",  // 不同的 key
+})
+
+carbonResearcher, _ := llmagent.New(llmagent.Config{
+    Name:        "CarbonCaptureResearcher",
+    Model:       model,
+    Instruction: "你是碳捕获领域研究员。调研碳捕获技术最新进展。",
+    OutputKey:   "carbon_result",  // 不同的 key
+})
+
+// 并行执行
+parallelResearch, _ := parallelagent.New(parallelagent.Config{
+    AgentConfig: agent.Config{
+        Name:      "ParallelResearch",
+        SubAgents: []agent.Agent{energyResearcher, evResearcher, carbonResearcher},
+    },
+})
+
+// 合成 Agent（读取所有并行结果）
+synthesis, _ := llmagent.New(llmagent.Config{
+    Name:  "SynthesisAgent",
+    Model: model,
+    Instruction: `你是一个研究分析师。根据以下三份报告，撰写一份综合分析。
+
+可再生能源报告：
+{energy_result}
+
+电动汽车报告：
+{ev_result}
+
+碳捕获报告：
+{carbon_result}
+
+请找出三个领域的交叉点，提出综合建议。`,
+})
+
+// 整体流水线 = 并行调研 + 串行汇总
+pipeline, _ := sequentialagent.New(sequentialagent.Config{
+    AgentConfig: agent.Config{
+        Name:      "ResearchPipeline",
+        SubAgents: []agent.Agent{parallelResearch, synthesis},
+    },
+})
+```
+
+**执行流程**：
+
+```
+          ┌→ 能源研究员 → state["energy_result"]
+并行执行 →├→ 电动车研究员 → state["ev_result"]
+          └→ 碳捕获研究员 → state["carbon_result"]
+              ↓（全部完成后）
+        合成 Agent 读取三个 state → 最终报告
+```
+
 ### LoopAgent
 
 定义于 `source/agent/workflowagents/loopagent/agent.go`，循环执行子 Agent：
@@ -384,6 +543,99 @@ loopAgent, err := loopagent.New(loopagent.Config{
 - `MaxIterations` 为 0 时无限循环，直到子 Agent 触发 Escalate 退出
 - 任何子 Agent 产出的事件 `Actions.Escalate == true` 时，立即退出循环
 - 适用于迭代优化、反复修订等场景
+
+#### 终止机制：ExitLoop 工具
+
+```go
+type exitLoopArgs struct{}
+type exitLoopResult struct{}
+
+func exitLoop(ctx tool.Context, args exitLoopArgs) (exitLoopResult, error) {
+    ctx.Actions().Escalate = true  // 设置 Escalate 信号 → 终止循环
+    return exitLoopResult{}, nil
+}
+
+exitTool, _ := functiontool.New(functiontool.Config{
+    Name:        "exit_loop",
+    Description: "当质量已达标，不需要继续修改时调用此工具退出循环。",
+}, exitLoop)
+```
+
+#### 实战：迭代式文档改进
+
+**场景**：写初稿 → 循环（批评 → 修改/退出），直到文档质量达标。
+
+```go
+const docKey = "current_document"
+
+// 第一步：初始写作 Agent
+writer, _ := llmagent.New(llmagent.Config{
+    Name:        "InitialWriter",
+    Model:       model,
+    Instruction: "你是一个创意写作助手。根据用户主题写一个短故事（2-4句话）。",
+    OutputKey:   docKey,
+})
+
+// 循环内 Step A：批评 Agent
+critic, _ := llmagent.New(llmagent.Config{
+    Name:  "Critic",
+    Model: model,
+    Instruction: `你是一个文学批评家。评价以下故事的质量。
+
+故事：
+{` + docKey + `}
+
+如果故事已经很好（有趣、连贯、有创意），回复"APPROVED"。
+否则列出具体改进建议。`,
+    OutputKey: "critique",
+})
+
+// 循环内 Step B：修改 Agent（含退出工具）
+reviser, _ := llmagent.New(llmagent.Config{
+    Name:  "Reviser",
+    Model: model,
+    Instruction: `你根据批评意见修改故事。如果批评说"APPROVED"，调用 exit_loop 工具退出。
+否则修改故事并输出新版本。
+
+批评意见：{critique}
+当前故事：{` + docKey + `}`,
+    Tools:     []tool.Tool{exitTool},
+    OutputKey: docKey,  // 覆盖之前的文档
+})
+
+// 循环：批评 → 修改（最多 5 轮）
+refinementLoop, _ := loopagent.New(loopagent.Config{
+    AgentConfig: agent.Config{
+        Name:      "RefinementLoop",
+        SubAgents: []agent.Agent{critic, reviser},
+    },
+    MaxIterations: 5,
+})
+
+// 整体流水线 = 初始写作 + 循环改进
+pipeline, _ := sequentialagent.New(sequentialagent.Config{
+    AgentConfig: agent.Config{
+        Name:      "IterativeWriter",
+        SubAgents: []agent.Agent{writer, refinementLoop},
+    },
+})
+```
+
+**执行流程**：
+
+```
+初始写作 → state["current_document"] = "从前有座山..."
+    ↓
+循环第1轮：
+  批评 → "故事太平淡，加入冲突"
+  修改 → state["current_document"] = "从前有座山，山下住着一条龙..."
+    ↓
+循环第2轮：
+  批评 → "APPROVED"
+  修改 → 调用 exit_loop → Escalate=true → 循环终止
+    ↓
+输出最终故事
+```
 
 ## 5. Remote Agent (A2A)
 
@@ -426,6 +678,166 @@ Agent 通过 `SubAgents` 构成树形结构。LLMAgent 可通过内置的 `trans
 - **向同级 Agent 转移**：默认允许，设置 `DisallowTransferToPeers: true` 可禁止
 
 Runner 通过 `parentmap.Map` 维护完整的父子关系，在 `findAgentToRun` 中利用此映射判断跨树转移是否可行。转移时，`isTransferableAcrossAgentTree` 会沿父链逐层检查 `DisallowTransferToParent` 设置。
+
+### Agent 转移实战
+
+```go
+refundAgent, _ := llmagent.New(llmagent.Config{
+    Name:        "refund_agent",
+    Model:       model,
+    Instruction: "你是退款处理专家。帮助用户处理退款请求。",
+})
+
+complaintAgent, _ := llmagent.New(llmagent.Config{
+    Name:        "complaint_agent",
+    Model:       model,
+    Instruction: "你是投诉处理专家。帮助用户处理投诉。",
+})
+
+coordinator, _ := llmagent.New(llmagent.Config{
+    Name:        "coordinator",
+    Model:       model,
+    Instruction: "你是客服总机。根据用户问题，将用户转交给合适的专业 Agent。不要尝试自己解决专业问题。",
+    SubAgents:   []agent.Agent{refundAgent, complaintAgent},
+})
+```
+
+当用户说"我要退款"时，`coordinator` 会自动生成 `transfer_to_agent("refund_agent")` 调用，ADK 框架自动处理转移。
+
+### 多 Agent 交互三大机制
+
+| 机制 | 触发方式 | 适用场景 |
+|------|----------|----------|
+| **Shared State** | 自动（OutputKey → 模板变量） | 流水线数据传递 |
+| **Agent Transfer** | LLM 自主决策 | 智能路由、意图分发 |
+| **Agent-as-a-Tool** | LLM 像调用工具一样调用 | 按需调用另一个 Agent |
+
+### 常见编排模式
+
+**模式一：Coordinator/Dispatcher（总机分发）**
+
+```
+Coordinator（LLM Agent）
+  ├── refund_agent
+  ├── complaint_agent
+  └── general_agent
+```
+
+用 Agent Transfer 实现（见上方实战示例）。
+
+**模式二：Fan-Out/Gather（并行收集）**
+
+```
+SequentialAgent
+  ├── ParallelAgent（并行获取）
+  │     ├── researcher_1
+  │     ├── researcher_2
+  │     └── researcher_3
+  └── synthesis_agent（汇总）
+```
+
+见并行调研实战示例。
+
+**模式三：Iterative Refinement（迭代改进）**
+
+```
+SequentialAgent
+  ├── initial_writer
+  └── LoopAgent
+        ├── critic
+        └── reviser（含 exit_loop 工具）
+```
+
+见迭代文档改进实战示例。
+
+**模式四：条件分支（Custom Agent）**
+
+```go
+conditionalRouter, _ := agent.New(agent.Config{
+    Name:      "conditional_router",
+    SubAgents: []agent.Agent{techAgent, generalAgent},
+    Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+        return func(yield func(*session.Event, error) bool) {
+            category, _ := ctx.Session().State().Get("category")
+            var target agent.Agent
+            if category == "technical" {
+                target = ctx.Agent().FindSubAgent("tech_agent")
+            } else {
+                target = ctx.Agent().FindSubAgent("general_agent")
+            }
+            for event, err := range target.Run(ctx) {
+                if err != nil { yield(nil, err); return }
+                if !yield(event, nil) { return }
+            }
+        }
+    },
+})
+```
+
+### 踩坑指南
+
+**⚠️ Agent 单亲规则**：一个 Agent 实例只能作为一个父 Agent 的子 Agent。需要多处使用必须创建多个实例。
+
+```go
+// ❌ 错误：同一个 agent 不能被两个父 Agent 引用
+shared := llmagent.New(...)
+parent1 := sequentialagent.New(...{SubAgents: []agent.Agent{shared}})
+parent2 := sequentialagent.New(...{SubAgents: []agent.Agent{shared}})  // 报错！
+
+// ✅ 正确：创建两个独立的实例
+agent1 := llmagent.New(...)
+agent2 := llmagent.New(...)
+```
+
+**⚠️ ParallelAgent 竞态**：并行子 Agent 的 OutputKey 必须不同。
+
+```go
+// ❌ 错误：竞态！
+agent1 := llmagent.New(...{OutputKey: "result"})
+agent2 := llmagent.New(...{OutputKey: "result"})
+
+// ✅ 正确
+agent1 := llmagent.New(...{OutputKey: "result_a"})
+agent2 := llmagent.New(...{OutputKey: "result_b"})
+```
+
+**⚠️ LoopAgent 必须有终止条件**：`MaxIterations: 0` 意味着无限循环，必须配合 exit_loop 工具使用。
+
+**⚠️ Agent Routing 不支持 Go**：官方的 `RoutedAgent` 仅支持 TypeScript。Go 版本用 Custom Agent 实现（见模式四）。
+
+### Workflow Agent 速查
+
+| 类型 | 执行方式 | 终止条件 | 典型场景 |
+|------|----------|----------|----------|
+| SequentialAgent | 顺序执行 | 最后一个子 Agent 完成 | 流水线、多步处理 |
+| ParallelAgent | 并行执行 | 所有子 Agent 完成 | 并行调研、多源获取 |
+| LoopAgent | 循环执行 | MaxIterations 或 Escalate | 迭代改进、重试 |
+
+```go
+// SequentialAgent
+seq, _ := sequentialagent.New(sequentialagent.Config{
+    AgentConfig: agent.Config{Name: "pipeline", SubAgents: []agent.Agent{a1, a2, a3}},
+})
+
+// ParallelAgent
+par, _ := parallelagent.New(parallelagent.Config{
+    AgentConfig: agent.Config{Name: "parallel", SubAgents: []agent.Agent{a1, a2, a3}},
+})
+
+// LoopAgent
+loop, _ := loopagent.New(loopagent.Config{
+    AgentConfig: agent.Config{Name: "loop", SubAgents: []agent.Agent{a1, a2}},
+    MaxIterations: 5,
+})
+
+// Agent Transfer（LLM 自主路由）
+coordinator, _ := llmagent.New(llmagent.Config{
+    Name: "coordinator", Model: model, SubAgents: []agent.Agent{agent1, agent2},
+})
+
+// Agent-as-a-Tool
+tool := agenttool.New(someAgent, &agenttool.Config{SkipSummarization: true})
+```
 
 ## 7. InvocationContext
 

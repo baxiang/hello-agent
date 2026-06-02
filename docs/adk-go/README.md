@@ -21,7 +21,7 @@
 | 03 | [Agent 模型详解](./03-agent.md) | Agent 接口、LLMAgent 完整 Config、Custom Agent 实战、Workflow Agents、回调系统、A2A、InvocationContext |
 | 04 | [Runner 执行模型](./04-runner.md) | Runner 结构、Run/RunLive 执行流程、Agent 路由、配置项 |
 | 05 | [LLM 接入层](./05-model.md) | model.LLM 接口、DeepSeek 自定义模型实战、Gemini 内置实现、Go 版本限制 |
-| 06 | [工具系统](./06-tool.md) | Tool 接口、FunctionTool 详解、Tool Context 实战、AgentTool、MCP Toolset、HITL 确认、Events 事件流 |
+| 06 | [工具系统](./06-tool.md) | Tool 接口、FunctionTool 最佳实践、Tool Context 实战、HITL 三级确认、Skills 技能系统、常见问题 |
 
 ### 三、状态与存储篇
 
