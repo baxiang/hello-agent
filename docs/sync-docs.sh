@@ -34,6 +34,9 @@ sync_dir() {
 echo "Syncing adk-go docs..."
 sync_dir "$BASE_DIR/adk-go/docs/" "$DOCS_DIR/adk-go/" "$DOCS_DIR/adk-go/README.md"
 
+echo "Syncing go-iterators docs..."
+sync_dir "$BASE_DIR/go-iterators/" "$DOCS_DIR/go-iterators/" "$DOCS_DIR/go-iterators/README.md"
+
 echo "Syncing eino docs..."
 sync_dir "$BASE_DIR/eino/docs/" "$DOCS_DIR/eino/" "$DOCS_DIR/eino/README.md"
 

@@ -30,6 +30,7 @@ export default defineConfig({
       {
         text: 'Go 框架',
         items: [
+          { text: 'Go 迭代器基础', link: '/go-iterators/' },
           { text: 'ADK-Go', link: '/adk-go/' },
           { text: 'LangChainGo', link: '/langchaingo/' },
           { text: 'Eino', link: '/eino/' },
@@ -367,6 +368,14 @@ export default defineConfig({
             { text: '工具与依赖', link: '/pydantic-ai/03-tools-deps' },
             { text: '流式与可观测性', link: '/pydantic-ai/04-streaming-observability-evals' },
             { text: 'MCP/A2A 与生产', link: '/pydantic-ai/05-mcp-a2a-production' },
+          ]
+        }
+      ],
+      '/go-iterators/': [
+        {
+          text: 'Go 迭代器',
+          items: [
+            { text: '从零掌握 iter.Seq2', link: '/go-iterators/00-go-iterators-from-zero' },
           ]
         }
       ],

@@ -14,6 +14,10 @@ hero:
       link: https://github.com/baxiang/hello-agent
 
 features:
+  - icon: 🔄
+    title: Go 迭代器
+    details: Go 1.23 iter.Seq2 从零到精通，闭包→组合→ADK 源码实战
+    link: /go-iterators/
   - icon: 🐹
     title: ADK-Go
     details: Google 开源 Go Agent 开发套件，迭代器+Channel 驱动
