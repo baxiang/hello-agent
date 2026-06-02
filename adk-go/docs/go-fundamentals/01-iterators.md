@@ -1,185 +1,274 @@
-# Go 迭代器（iter.Seq2）— ADK-Go 事件流的核心协议
+# Go 迭代器（iter.Seq2）— 从零掌握 ADK-Go 的核心协议
 
-## 1. Go 1.23 迭代器：从通道到函数式迭代
+> 学习路线：闭包基础 → 迭代器构造 → 消费与控制 → 组合与嵌套 → ADK 源码实战 → 常见陷阱
 
-Go 1.23 引入了标准库 `iter` 包，定义了两种迭代器类型：
+## 1. 前置：理解闭包
+
+写迭代器本质上是在写一个**返回闭包的函数**。如果对闭包不熟，后面全是天书。先花 3 分钟搞懂。
+
+### 1.1 什么是闭包
+
+闭包 = 函数 + 它引用的外部变量。函数"捕获"了创建时所在作用域的变量，即使外部函数已经返回，这些变量依然存活。
 
 ```go
-// 单值迭代器
-type Seq[V any] func(yield func(V) bool)
+func counter(start int) func() int {
+    // start 被捕获进闭包
+    return func() int {
+        start++  // 每次调用修改的是同一个 start
+        return start
+    }
+}
 
-// 键值对迭代器
+c := counter(10)
+fmt.Println(c()) // 11
+fmt.Println(c()) // 12
+fmt.Println(c()) // 13
+```
+
+三次调用操作的是**同一个** `start` 变量，这就是闭包的核心——函数绑定了变量，变量不随外部函数返回而销毁。
+
+### 1.2 闭包在迭代器中的角色
+
+看看迭代器的类型定义：
+
+```go
 type Seq2[K, V any] func(yield func(K, V) bool)
 ```
 
-`iter.Seq2` 是 adk-go 事件流的核心抽象——所有 Agent 的 `Run()` 方法都通过它产出事件流。理解迭代器是理解 adk-go 运行机制的**第一道门槛**。
+展开理解：`Seq2[int, error]` 就是一个函数类型，它接收一个 `yield` 回调，本身没有返回值。迭代器**本身就是**一个闭包：
 
-### 为什么不是 channel？
-
-在 Go 1.23 之前，流式数据通常用 channel 传递：
-
-```go
-// 旧方式：channel 流式传输
-func Run(ctx context.Context) <-chan *Event { ... }
+```
+构造迭代器：return func(yield func(K, V) bool) { ... }
+              ↑                                    ↑
+              闭包函数                             闭包体通过 yield 产出数据
 ```
 
-channel 的问题：
-- **消费方必须 goroutine**：生产者和消费者需要分别运行在不同 goroutine
-- **缓冲区大小难以抉择**：0 则阻塞，大了浪费内存
-- **错误传播笨拙**：需要额外的 error channel 或包装类型
-- **无法被 for-range 直接驱动**：`for v := range ch` 无法同时拿到 error
-
-`iter.Seq2` 的优势：
-- **拉取式**：消费方决定何时取下一个值，无需 goroutine 协调
-- **零缓冲**：不需要预分配内存
-- **错误内嵌**：`iter.Seq2[*Event, error]` 天然携带错误信息
-- **for-range 原生支持**：`for event, err := range agent.Run(ctx)`
+这个闭包捕获了构造时的参数（比如要迭代的数据），被调用时通过 `yield` 把数据推给消费方。
 
 ---
 
-## 2. yield 函数：迭代器的控制阀门
+## 2. 从零构建第一个迭代器
 
-迭代器的核心是 `yield` 回调函数。它由**消费方**（for-range 循环）提供，**生产方**每次调用 `yield(k, v)` 产出一条数据。
+不急着看 ADK 源码。先写一个最简单的迭代器，理解"谁调用了谁"。
 
-### yield 的返回值
+### 2.1 最简迭代器：产出 3 条消息
 
 ```go
-yield func(K, V) bool
+func threeMessages() iter.Seq2[string, error] {
+    return func(yield func(string, error) bool) {
+        yield("hello", nil)   // 产出第 1 条
+        yield("world", nil)   // 产出第 2 条
+        yield("done",  nil)   // 产出第 3 条
+    }
+}
+
+// 使用
+for msg, err := range threeMessages() {
+    fmt.Println(msg)
+}
+// 输出:
+// hello
+// world
+// done
 ```
 
-- **返回 `true`**：消费方继续迭代，生产方可以继续 yield 下一条
-- **返回 `false`**：消费方已经 break 或不再需要数据，**生产方必须立即停止**
+### 2.2 逐行追溯：到底谁调谁？
 
-这是迭代器的"背压"机制。当 `yield(false)` 时，生产方**必须立刻 return**，否则会导致不可预期的行为。
+这是初学者最大的困惑。`for msg, err := range threeMessages()` 一行代码背后发生了什么：
 
-### 最简迭代器
+```
+步骤 1：threeMessages() 调用
+  → 返回一个闭包 func(yield func(string,error) bool) { ... }
+  → 此时闭包体内的代码一行都还没执行！
+
+步骤 2：for-range 启动迭代
+  → Go 编译器自动生成一个 yield 函数：
+      func(msg string, err error) bool {
+          // 执行循环体
+          fmt.Println(msg)
+          return true  // 表示"继续迭代"
+      }
+  → 把这个 yield 函数作为参数传给闭包
+
+步骤 3：闭包开始执行
+  → yield("hello", nil) 被调用
+      → 控制权交给 for-range 的循环体
+      → fmt.Println("hello") 执行
+      → 循环体返回 true（继续）
+      → 控制权回到闭包，继续往下走
+
+步骤 4：yield("world", nil) → 同上
+
+步骤 5：yield("done", nil) → 同上
+
+步骤 6：闭包函数执行完毕，for-range 自动退出
+```
+
+**核心理解**：`for-range` 和闭包是**交替执行**的——闭包通过 `yield` 交出控制权，循环体处理完再还回来。就像乒乓球，你来我往。
+
+### 2.3 写成循环形式
+
+上面的迭代器手动写了 3 次 yield，实际场景是循环：
 
 ```go
-func count(n int) iter.Seq2[int, error] {
+func messagesFromSlice(msgs []string) iter.Seq2[string, error] {
+    return func(yield func(string, error) bool) {
+        for _, msg := range msgs {
+            if !yield(msg, nil) {
+                return  // 消费方喊停，立即退出
+            }
+        }
+    }
+}
+
+// 使用
+msgs := []string{"hello", "world", "done"}
+for msg, err := range messagesFromSlice(msgs) {
+    fmt.Println(msg)
+}
+```
+
+执行追踪（假设 msgs = ["hello", "world", "done"]）：
+
+```
+messagesFromSlice(msgs) 返回闭包（msgs 被捕获）
+for-range 创建 yield 函数，调用闭包
+  → 循环 i=0: yield("hello", nil) → 循环体打印 → 返回 true
+  → 循环 i=1: yield("world", nil) → 循环体打印 → 返回 true
+  → 循环 i=2: yield("done",  nil) → 循环体打印 → 返回 true
+  → 循环结束，函数返回
+for-range 检测到迭代结束，退出
+```
+
+---
+
+## 3. 控制流：yield 返回值与提前终止
+
+### 3.1 yield 返回值的含义
+
+```go
+if !yield(msg, nil) {   // ← 检查返回值
+    return              // ← false 表示消费方喊停
+}
+```
+
+`yield` 返回 `bool`，由消费方（for-range 循环体）决定：
+- `true`：继续，生产方接着产出下一条
+- `false`：停止！消费方 break 或 return 了，生产方必须立刻退出
+
+### 3.2 消费方提前退出
+
+```go
+func numbers() iter.Seq2[int, error] {
     return func(yield func(int, error) bool) {
-        for i := 0; i < n; i++ {
+        for i := 0; i < 10; i++ {
+            fmt.Printf("生产: %d\n", i)
             if !yield(i, nil) {
-                return // 消费方已停止，必须退出
+                fmt.Println("消费方喊停，退出")
+                return
             }
         }
     }
 }
 
-// 消费
-for i, err := range count(5) {
-    if err != nil {
-        log.Fatal(err)
+for n, err := range numbers() {
+    fmt.Printf("消费: %d\n", n)
+    if n >= 2 {
+        break  // 只消费 3 个
     }
-    fmt.Println(i)
 }
+
+// 输出:
+// 生产: 0
+// 消费: 0
+// 生产: 1
+// 消费: 1
+// 生产: 2
+// 消费: 2
+// 生产: 3       ← 注意：生产方多产了一个！
+// 消费方喊停，退出
+
+// 核心观察：第 3 次 yield(2, nil) 时 cycle 体处理完才 break，
+// 但生产方不知道，继续循环到了 i=3，调 yield(3, nil) 拿到 false 才停。
+// 这是正常的——生产方总是"多走一步"才发现消费者已经停了。
 ```
 
----
+> **重点**：这个例子暴露了 yield 的"滞后性"——消费方在第 n 次迭代 break，生产方必须等到**下一次** yield 才能收到 false。这正是迭代器需要检查 `yield` 返回值的原因。
 
-## 3. Agent.Run()：adk-go 的迭代器协议
-
-adk-go 的 `Agent` 接口定义了核心方法签名（`agent/agent.go:46`）：
+### 3.3 不检查返回值的后果
 
 ```go
-type Agent interface {
-    Name() string
-    Description() string
-    Run(InvocationContext) iter.Seq2[*session.Event, error]
-    SubAgents() []Agent
-    FindAgent(name string) Agent
-    FindSubAgent(name string) Agent
-    internal() *agent
-}
-```
-
-`Run` 返回 `iter.Seq2[*session.Event, error]`，意味着：
-- 每次迭代产出一个 `*session.Event` 和一个 `error`
-- `error != nil` 表示这一步出了问题，但迭代**不一定结束**（后续可能还有事件）
-- `error == nil` 且 `event != nil` 是正常事件
-
-这个设计允许 Agent 在出错后继续产出事件，而不是整个迭代直接终止。
-
----
-
-## 4. 消费迭代器：for-range 遍历事件流
-
-在 adk-go 中，消费 Agent 事件流的标准模式如下（见 `runner/runner.go:234`）：
-
-```go
-for event, err := range agentToRun.Run(ctx) {
-    if err != nil {
-        // 处理错误，但不一定 break
-        if !yield(event, err) {
-            return
+// 危险写法：忽略 yield 返回值
+func danger() iter.Seq2[int, error] {
+    return func(yield func(int, error) bool) {
+        for i := 0; i < 1000000; i++ {
+            yield(i, nil)  // 没检查返回值
         }
-        continue
-    }
-    // 处理正常事件
-    if !event.LLMResponse.Partial {
-        // 非局部事件，提交到 session
-        r.sessionService.AppendEvent(ctx, storedSession, event)
-    }
-    if !yield(event, nil) {
-        return
+        // 即使消费方 break 了，这里仍然死循环到底
     }
 }
-```
 
-关键点：
-1. **error 不终止迭代**：adk-go 的设计允许中间出错后继续
-2. **Partial 事件不持久化**：流式中间结果直接透传，不写入 session
-3. **yield 返回 false 时立即退出**：Runner 本身也在生产迭代器，必须尊重消费者的 break
+for n, _ := range danger() {
+    if n > 5 {
+        break  // break 无效！生产方根本没看返回值
+    }
+}
+// 后果：程序卡死，100万次循环全跑完。
+```
 
 ---
 
-## 5. 构造迭代器：返回 func(yield ...)
+## 4. 迭代器组合——ADK 的精髓
 
-adk-go 中所有 Agent 的 `Run()` 方法都遵循同一模式：返回一个闭包函数。
+理解"迭代器包迭代器"是掌握 ADK-Go 的关键。ADK 中每个 Agent 的 `Run()` 都返回迭代器，Workflow Agent 的工作就是消费子 Agent 的迭代器、加上自己的逻辑、再产生一个新的迭代器。
 
-### 自定义 Agent 的 Run
+### 4.1 模式一：转发（Pass-through）
 
-使用 `agent.New()` 创建自定义 Agent 时（`agent/agent.go:99`），`Config.Run` 字段的签名是：
-
-```go
-Run func(InvocationContext) iter.Seq2[*session.Event, error]
-```
-
-一个最简自定义 Agent：
+最基础的组合：消费一个迭代器，原样转发出去。
 
 ```go
-myAgent, err := agent.New(agent.Config{
-    Name:        "greeter",
-    Description: "向用户打招呼的代理",
-    Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-        return func(yield func(*session.Event, error) bool) {
-            event := session.NewEvent(ctx.InvocationID())
-            event.Author = ctx.Agent().Name()
-            event.LLMResponse = model.LLMResponse{
-                Content: &genai.Content{
-                    Role: genai.RoleModel,
-                    Parts: []*genai.Part{{Text: "你好，世界！"}},
-                },
+// 把内部迭代器的所有事件原样转发
+func passthrough[T any](inner iter.Seq2[T, error]) iter.Seq2[T, error] {
+    return func(yield func(T, error) bool) {
+        for val, err := range inner {
+            // for-range 循环体 = 转发逻辑
+            if !yield(val, err) {
+                return  // 外部消费方喊停
             }
-            yield(event, nil)
         }
-    },
-})
+    }
+}
 ```
 
-### LlmAgent 的 Run 实现
+数据流：
 
-`LlmAgent` 的 `run` 方法（`agent/llmagent/llmagent.go:361`）展示了更复杂的模式：
+```
+外部消费方 → for val, err := range passthroughResult
+                         ↓
+              passthrough 的 for-range 消费 inner
+                         ↓
+              inner 每次 yield → passthrough 收到 → yield 给外部
+```
+
+这是 ADK 中最常见的模式——Runner 消费 Agent.Run() 的输出，LlmAgent 消费内部 Flow 的输出，每个层级都是 "消费 → 加工 → yield"。
+
+### 4.2 模式二：过滤（Filter）
+
+在转发过程中过滤掉不需要的数据：
 
 ```go
-func (a *llmAgent) run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-    // 准备上下文和流程对象
-    f := &llminternal.Flow{...}
-
-    return func(yield func(*session.Event, error) bool) {
-        // 消费内部 Flow 的迭代器，转发给外部
-        for ev, err := range f.Run(ctx) {
-            a.maybeSaveOutputToState(ev)
-            if !yield(ev, err) {
+// 过滤掉所有错误为 nil 但 value 为空字符串的事件
+func filterEmpty(inner iter.Seq2[string, error]) iter.Seq2[string, error] {
+    return func(yield func(string, error) bool) {
+        for val, err := range inner {
+            if err != nil {
+                if !yield("", err) { return }  // 错误必须传递
+                continue
+            }
+            if val == "" {
+                continue  // 跳过空字符串，不 yield 给外部
+            }
+            if !yield(val, nil) {
                 return
             }
         }
@@ -187,15 +276,207 @@ func (a *llmAgent) run(ctx agent.InvocationContext) iter.Seq2[*session.Event, er
 }
 ```
 
-这是经典的**迭代器链**模式：外层迭代器消费内层迭代器，添加自己的逻辑（如 `maybeSaveOutputToState`），再 yield 给更外层。
+这对应 ADK 中 Runner 过滤 Partial 事件、忽略空内容的模式。
+
+### 4.3 模式三：串联（Chaining）—— SequentialAgent 内核
+
+将多个迭代器串联成一个，A 跑完跑 B，B 跑完跑 C：
+
+```go
+func chain[T any](iters ...iter.Seq2[T, error]) iter.Seq2[T, error] {
+    return func(yield func(T, error) bool) {
+        for _, it := range iters {
+            for val, err := range it {
+                if !yield(val, err) {
+                    return
+                }
+            }
+        }
+    }
+}
+
+// 使用
+a := simpleIter("A")
+b := simpleIter("B")
+c := simpleIter("C")
+
+for val, err := range chain(a, b, c) {
+    fmt.Println(val)
+    if val == "A2" {
+        break  // 提前退出，B 和 C 都不会执行
+    }
+}
+```
+
+追踪 3 个迭代器的串联执行：
+
+```
+chain 返回闭包
+for-range 调用闭包
+  → 外层循环 iter[0] = a
+     → 内层 for val, err := range a
+        → a 的闭包执行: yield("A0") → 打印 "A0" → continue
+        → a 的闭包执行: yield("A1") → 打印 "A1" → continue
+        → a 的闭包执行: yield("A2") → 打印 "A2" → break!
+        → yield 返回 false → return (退出 chain)
+  → B 和 C 完全没有被消费
+```
+
+**这就是 SequentialAgent 的核心**：只是多了一层 "消费子Agent迭代器 → 转发" 的包装。
+
+### 4.4 模式四：循环（Loop）
+
+在迭代器内部用循环控制重复执行：
+
+```go
+func retry(inner iter.Seq2[string, error], maxRetries int) iter.Seq2[string, error] {
+    return func(yield func(string, error) bool) {
+        for attempt := 0; attempt < maxRetries; attempt++ {
+            for val, err := range inner {
+                if err != nil {
+                    if !yield(val, err) { return }
+                    break  // 有错误就重试
+                }
+                if !yield(val, nil) { return }
+            }
+            // 如果 inner 全部成功执行完毕，退出重试
+            return
+        }
+    }
+}
+```
+
+追踪（模拟 inner 第一次失败，第二次成功）：
+
+```
+attempt=0:
+  消费 inner → yield(err, someErr)
+  break（重新开始）
+attempt=1:
+  消费 inner → yield("success", nil) → yield("done", nil)
+  inner 全部消费完毕
+  return（退出 retry）
+```
+
+**这就是 LoopAgent 的核心**。
 
 ---
 
-## 6. adk-go 源码中的迭代器实例
+## 5. 简化版 ADK 迭代器：手写一套 Agent 系统
 
-### SequentialAgent：顺序串联迭代器
+用上面学到的模式，手写一个迷你版 Agent 框架：
 
-`agent/workflowagents/sequentialagent/agent.go:79`：
+```go
+// --- 类型定义 ---
+type Event struct{ Text string }
+
+type Agent struct {
+    Name string
+    Run  func() iter.Seq2[*Event, error]
+    Subs []*Agent
+}
+
+// --- 构造器 ---
+
+// 简单 Agent：产出 3 条事件
+func newSimpleAgent(name string) *Agent {
+    return &Agent{
+        Name: name,
+        Run: func() iter.Seq2[*Event, error] {
+            return func(yield func(*Event, error) bool) {
+                for i := 0; i < 3; i++ {
+                    ev := &Event{Text: fmt.Sprintf("[%s] message %d", name, i)}
+                    fmt.Printf("  生产: %s\n", ev.Text)
+                    if !yield(ev, nil) {
+                        return
+                    }
+                }
+            }
+        },
+    }
+}
+
+// SequentialAgent：串联子 Agent 的事件流
+func newSeqAgent(name string, subs ...*Agent) *Agent {
+    return &Agent{
+        Name: name,
+        Subs: subs,
+        Run: func() iter.Seq2[*Event, error] {
+            return func(yield func(*Event, error) bool) {
+                fmt.Printf("--- [%s] 开始 ---\n", name)
+                for _, sub := range subs {
+                    for ev, err := range sub.Run() {
+                        if !yield(ev, err) {
+                            return
+                        }
+                    }
+                }
+                fmt.Printf("--- [%s] 完成 ---\n", name)
+            }
+        },
+    }
+}
+
+// --- 运行 ---
+func main() {
+    a := newSimpleAgent("A")
+    b := newSimpleAgent("B")
+    c := newSimpleAgent("C")
+    pipeline := newSeqAgent("pipeline", a, b, c)
+
+    fmt.Println("开始消费事件流:")
+    for ev, err := range pipeline.Run() {
+        if err != nil {
+            fmt.Printf("错误: %v\n", err)
+            continue
+        }
+        fmt.Printf("消费: %s\n", ev.Text)
+    }
+}
+```
+
+运行结果：
+
+```
+开始消费事件流:
+--- [pipeline] 开始 ---
+  生产: [A] message 0
+消费: [A] message 0
+  生产: [A] message 1
+消费: [A] message 1
+  生产: [A] message 2
+消费: [A] message 2
+  生产: [B] message 0
+消费: [B] message 0
+  生产: [B] message 1
+消费: [B] message 1
+  生产: [B] message 2
+消费: [B] message 2
+  生产: [C] message 0
+消费: [C] message 0
+  生产: [C] message 1
+消费: [C] message 1
+  生产: [C] message 2
+消费: [C] message 2
+--- [pipeline] 完成 ---
+```
+
+**每一行 "生产: ..." 和 "消费: ..." 之间的交替，就是 yield 在起作用。**
+
+---
+
+## 6. ADK 源码中的迭代器实战
+
+ADK 源码比上面的示例多了三层复杂性：
+1. 迭代器之间传递 `InvocationContext`（上下文）
+2. 事件结构体远比 `Event{Text}` 复杂
+3. 并行执行引入了 goroutine + channel
+
+但**模式完全一样**。下面逐一拆解。
+
+### 6.1 SequentialAgent：串联子Agent迭代器
+
+源码路径：`agent/workflowagents/sequentialagent/agent.go`
 
 ```go
 func (a *sequentialAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
@@ -211,68 +492,20 @@ func (a *sequentialAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Ev
 }
 ```
 
-顺序 Agent 将子 Agent 的事件流**串联**：第一个子 Agent 迭代完毕后，再开始第二个。
+这就是我们上面写的 `chain` 模式，一模一样。3 个子 Agent（A→B→C），外层 for 遍历子 Agent 列表，内层 for-range 消费每个子 Agent 的迭代器，yield 转发给 Runner。
 
-### ParallelAgent：并行合并迭代器
+### 6.2 LlmAgent：中间加工
 
-`agent/workflowagents/parallelagent/agent.go:67`：
-
-```go
-func run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-    // 启动 errgroup 并行运行子 Agent
-    errGroup, errGroupCtx := errgroup.WithContext(ctx)
-    resultsChan := make(chan result)
-
-    for _, sa := range ctx.Agent().SubAgents() {
-        errGroup.Go(func() error {
-            return runSubAgent(subCtx, subAgent, resultsChan, doneChan)
-        })
-    }
-
-    // 收集 goroutine 结果，转为迭代器
-    return func(yield func(*session.Event, error) bool) {
-        for res := range resultsChan {
-            shouldContinue := yield(res.event, res.err)
-            if res.ackChan != nil {
-                close(res.ackChan) // 通知子 Agent 可以继续
-            }
-            if !shouldContinue {
-                break
-            }
-        }
-    }
-}
-```
-
-并行 Agent 用 channel 桥接 goroutine 和迭代器，通过 `ackChan` 实现背压控制。
-
-### LoopAgent：循环迭代器
-
-`agent/workflowagents/loopagent/agent.go:75`：
+源码路径：`agent/llmagent/llmagent.go`
 
 ```go
-func (a *loopAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
-    count := a.maxIterations
+func (a *llmAgent) run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+    f := &llminternal.Flow{...}  // 准备内部执行流
+
     return func(yield func(*session.Event, error) bool) {
-        for {
-            shouldExit := false
-            for _, subAgent := range ctx.Agent().SubAgents() {
-                for event, err := range subAgent.Run(ctx) {
-                    if !yield(event, err) {
-                        return
-                    }
-                    if event != nil && event.Actions.Escalate {
-                        shouldExit = true
-                    }
-                }
-            }
-            if count > 0 {
-                count--
-                if count == 0 {
-                    return
-                }
-            }
-            if shouldExit {
+        for ev, err := range f.Run(ctx) {      // 消费内部 Flow
+            a.maybeSaveOutputToState(ev)       // 加工：自动存 OutputKey
+            if !yield(ev, err) {               // 转发给 Runner
                 return
             }
         }
@@ -280,95 +513,228 @@ func (a *loopAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, e
 }
 ```
 
-循环 Agent 在迭代器内部使用 `for {}` 无限循环，通过 `Escalate` 动作或 `MaxIterations` 计数器控制退出。
+模式是 "消费内层迭代器 → 加工事件 → 转发给外层"，就是上面 passthrough 模式加了一个 `maybeSaveOutputToState` 的加工步骤。
 
----
+### 6.3 ParallelAgent：goroutine + channel 桥接
 
-## 7. 与 Channel / StreamReader 的对比
+源码路径：`agent/workflowagents/parallelagent/agent.go`
 
-| 特性 | iter.Seq2 | Channel |
-|------|-----------|---------|
-| 拉取/推送 | 拉取式 | 推送式 |
-| 并发要求 | 同步即可 | 需要 goroutine |
-| 背压机制 | yield(false) | 缓冲区满阻塞 |
-| 错误传播 | 内嵌在 Seq2 中 | 额外 channel 或包装 |
-| for-range | 原生支持 | 支持（单值） |
-| 资源释放 | 函数返回即释放 | 需显式 close |
-| 组合性 | 闭包嵌套，自然链式 | 需要多个 goroutine |
-
-adk-go 选择 `iter.Seq2` 的核心理由：Agent 事件流本质上是**请求-响应**模型，用户发消息，Agent 产出一系列事件，消费方控制节奏。拉取模型天然匹配这种语义。
-
----
-
-## 8. 常见陷阱
-
-### 陷阱 1：忘记检查 error
+并行执行不能简单的 for-range 嵌套，因为 goroutine 之间的数据传递需要通过 channel：
 
 ```go
-// 错误：忽略了 error
-for event := range agent.Run(ctx) {
-    process(event) // event 可能为 nil！
-}
+func run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+    // 第一步：启动 goroutine 并行运行子 Agent
+    errGroup, _ := errgroup.WithContext(ctx)
+    resultsChan := make(chan result, 8)
 
-// 正确：必须同时检查 error
-for event, err := range agent.Run(ctx) {
-    if err != nil {
-        handleErr(err)
-        continue // 或 break
+    for _, sa := range ctx.Agent().SubAgents() {
+        errGroup.Go(func() error {
+            // 每个 goroutine 独立消费子 Agent 的迭代器
+            for ev, err := range sa.Run(subCtx) {
+                resultsChan <- result{event: ev, err: err}  // 发送到 channel
+            }
+            return nil
+        })
     }
-    process(event)
-}
-```
 
-在 adk-go 中，`error != nil` 时 `event` 可能为 nil，反之 `event != nil` 时 `error` 通常为 nil。
-
-### 陷阱 2：yield 后继续修改数据
-
-```go
-// 危险：yield 后修改了 event
-return func(yield func(*session.Event, error) bool) {
-    event := &session.Event{...}
-    yield(event, nil)
-    event.Author = "modified" // 消费方可能还在使用这个 event！
-}
-```
-
-`yield` 传递的是指针，消费方在 yield 返回后仍持有引用。修改已 yield 的数据会导致数据竞争。正确做法是 yield 前确保数据完整，yield 后不再修改。
-
-### 陷阱 3：忘记 yield(false) 时退出
-
-```go
-// 错误：yield 返回 false 后继续循环
-return func(yield func(*session.Event, error) bool) {
-    for i := 0; i < 100; i++ {
-        yield(makeEvent(i), nil) // 没有检查返回值！
-    }
-}
-
-// 正确：检查 yield 返回值
-return func(yield func(*session.Event, error) bool) bool) {
-    for i := 0; i < 100; i++ {
-        if !yield(makeEvent(i), nil) {
-            return
+    // 第二步：从 channel 收集结果，转为迭代器
+    return func(yield func(*session.Event, error) bool) {
+        for res := range resultsChan {
+            if !yield(res.event, res.err) {
+                break  // 消费方退出，停止收集
+            }
         }
     }
 }
 ```
 
-不检查 yield 返回值会导致消费者 break 后生产者仍在空转，浪费计算资源。
+执行追踪（3 个子 Agent A、B、C 并行运行）：
 
-### 陷阱 4：在迭代器中启动 goroutine 但未同步
+```
+时间线（并行，交错发生）：
 
-ParallelAgent 的实现展示了正确的模式：用 channel + ackChan 实现同步。如果直接在迭代器闭包中启动 goroutine 并 yield，必须确保 goroutine 的产出与 yield 调用正确同步，否则会出现数据竞争。
+goroutine A: yield("A0") → channel ← "A0"
+goroutine B: yield("B0") → channel ← "B0"
+goroutine C: yield("C0") → channel ← "C0"
+
+主 goroutine（迭代器）:
+  ← channel 收到 "A0" → yield("A0", nil)
+  ← channel 收到 "B0" → yield("B0", nil)
+  ← channel 收到 "C0" → yield("C0", nil)
+  ← channel 收到 "A1" → yield("A1", nil)
+  ... 顺序不确定，取决于哪个 goroutine 先完成
+```
+
+**关键点**：channel 是 goroutine 和迭代器之间的桥梁。goroutine 负责"生产"、往 channel 里放，迭代器负责"消费"、从 channel 里拿、yield 给外层。
+
+### 6.4 LoopAgent：迭代器内循环
+
+```go
+func (a *loopAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+    count := a.maxIterations
+    return func(yield func(*session.Event, error) bool) {
+        for {  // 无限循环，由内部条件控制退出
+            shouldExit := false
+            for _, subAgent := range ctx.Agent().SubAgents() {
+                for event, err := range subAgent.Run(ctx) {
+                    if !yield(event, err) {
+                        return
+                    }
+                    if event.Actions.Escalate {
+                        shouldExit = true  // 子 Agent 触发退出
+                    }
+                }
+            }
+            count--
+            if count == 0 { return }     // 达到最大迭代次数
+            if shouldExit { return }      // Escalate 触发退出
+        }
+    }
+}
+```
+
+追踪（critic + reviser 两个子 Agent，MaxIterations=3）：
+
+```
+迭代 1:
+  消费 critic.Run() → "需要改进" → yield 给外部
+  消费 reviser.Run() → "修改后的文本" → yield 给外部
+  count=2, 无 Escalate，继续
+
+迭代 2:
+  消费 critic.Run() → "仍需改进" → yield 给外部
+  消费 reviser.Run() → "再次修改" → yield 给外部
+  count=1, 无 Escalate，继续
+
+迭代 3:
+  消费 critic.Run() → "APPROVED" → yield 给外部
+  消费 reviser.Run()
+    → event.Actions.Escalate = true → shouldExit = true
+    → yield("最终版本") → yield 给外部
+  count=0 → return（达到最大迭代）
+```
+
+---
+
+## 7. 完整调用链：从用户输入到最终响应
+
+把 ADK 所有层级的迭代器串起来，一条用户消息的完整路径：
+
+```
+用户发送 "写一个 HTTP 服务器"
+    ↓
+Runner.Run()
+  → 创建 InvocationContext
+  → return func(yield ...) {    ← Runner 自己的迭代器
+        ↓
+        for event, err := range agent.Run(ctx) {   ← 消费 Agent 的迭代器
+              ↓
+              SequentialAgent.Run(ctx)
+                → return func(yield ...) {
+                      for _, sub := range subs {
+                          for ev, err := range sub.Run(ctx) {
+                                ↓
+                                CodeWriter.Run(ctx)    ← LlmAgent
+                                  → return func(yield ...) {
+                                        for ev, err := range flow.Run(ctx) {
+                                              ↓
+                                              Flow 调用 Gemini API
+                                              → yield(Event{Content:"func main()..."})
+                                              ↑
+                                        }
+                                        // 加工：maybeSaveOutputToState
+                                        // state["generated_code"] = "func main()..."
+                                        yield(ev, nil)  → 转发给 SequentialAgent
+                                    }
+                                ↑
+                                SequentialAgent 收到 → yield 给 Runner
+                          }
+                      }
+                  }
+              ↑
+              Runner 收到 → 持久化到 Session → yield 给外部
+        }
+    }
+外部（CLI/Web）：fmt.Println(event.Content)
+```
+
+**每一层的关系都一样**：消费内层迭代器 → 加工 → yield 给外层。理解了这个链条，ADK 的运行机制就全通了。
+
+---
+
+## 8. 常见陷阱
+
+### 陷阱 1：在 yield 之后修改已发送的数据
+
+```go
+// 危险：yield 传递指针，外部可能还在用
+return func(yield func(*session.Event, error) bool) {
+    event := &session.Event{Author: "alice"}
+    yield(event, nil)
+    event.Author = "bob"  // 外部可能已经读了 Author="alice"，现在被改成了 "bob"
+}
+```
+
+yield 的是指针，消费方拿到的是同一个对象的引用。yield 返回后不要再改。
+
+### 陷阱 2：yield 返回 false 后继续执行
+
+```go
+// 错误：没检查返回值，白费 CPU
+for i := 0; i < 100000; i++ {
+    yield(makeEvent(i), nil)  // 消费者可能早就 break 了
+}
+```
+
+每次 yield 必须检查返回值。
+
+### 陷阱 3：error 和 value 同时为 nil
+
+```go
+yield(nil, nil)  // 消费方收到 (nil, nil)，不知如何处理
+```
+
+在 ADK 中，要么 value != nil（正常事件），要么 error != nil（错误），不能两者都 nil。
+
+### 陷阱 4：迭代器和 goroutine 之间的同步
+
+ParallelAgent 展示了正确做法——用 channel + ackChan 同步。在迭代器闭包中启动 goroutine 直接调用 yield 会导致数据竞争，因为 yield 必须只在消费方的 goroutine 中被调用。
 
 ---
 
 ## 9. 练习
 
-1. **基础**：编写一个 `iter.Seq2[string, error]` 迭代器，依次产出 "hello"、"world"，然后模拟一个错误。
+### 基础
 
-2. **进阶**：实现一个 `filterAgent` 包装器，接收一个 `Agent`，在其事件流中过滤掉所有 `Partial` 为 true 的事件。
+用 `iter.Seq2[string, error]` 写一个迭代器，从字符串切片中依次产出每个单词，遇到空字符串时产出错误但不中断。
 
-3. **挑战**：参考 ParallelAgent 的实现，编写一个 `raceAgent`，并行运行两个子 Agent，只产出**第一个完成**的子 Agent 的事件流，并正确取消另一个。
+```go
+// 骨架
+func wordsFromSlice(words []string) iter.Seq2[string, error] {
+    // TODO
+}
+```
 
-4. **实战**：阅读 `runner/runner.go:131` 的 `Runner.Run()` 方法，画出从用户消息到最终事件的完整迭代器链路图，标注每一层 yield 的来源和去向。
+### 进阶
+
+实现一个包装函数，接收一个 `iter.Seq2[string, error]`，返回一个新迭代器：将所有产出转为大写，过滤掉长度 < 3 的单词，错误原样传递。
+
+```go
+func transformFilter(inner iter.Seq2[string, error]) iter.Seq2[string, error] {
+    // TODO
+}
+```
+
+### 挑战
+
+实现一个 `timeoutIter`，包装一个迭代器，如果单次 `yield` 调用超过指定时间仍没有返回，就产出超时错误并终止。
+
+```go
+func withTimeout[T any](inner iter.Seq2[T, error], timeout time.Duration) iter.Seq2[T, error] {
+    // TODO: 提示，需要 goroutine + select
+}
+```
+
+### 实战
+
+阅读 `runner/runner.go` 的 `Run()` 方法（约第 131 行），画出从用户消息到最终事件的完整迭代器层级图，标注每一层 yield 的来源和去向。
