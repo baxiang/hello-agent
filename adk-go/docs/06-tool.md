@@ -133,6 +133,73 @@ weatherTool, err := functiontool.New(functiontool.Config{
 })
 ```
 
+### jsonschema tag 最佳实践
+
+`jsonschema` tag 是最容易被忽略但**最重要的部分**——它直接决定了 LLM 能否正确调用你的工具。
+
+```go
+type searchUserArgs struct {
+    // 好的 jsonschema 描述：清晰告诉 LLM 这个参数是什么
+    Username string `json:"username" jsonschema:"The exact username to search for. Do not guess or make up usernames."`
+
+    // 差的 jsonschema 描述：LLM 不知道该传什么
+    // Username string `json:"username" jsonschema:"user"`
+}
+```
+
+**最佳实践**：
+- 描述要具体，说明格式和约束
+- 告诉 LLM 不该做什么（"Do not guess"）
+- 枚举值直接列出（"Must be one of: active, inactive, pending"）
+- 带示例值（"e.g. ORD-20260101-001"）
+
+### 必填 vs 可选参数
+
+```go
+type queryOrderArgs struct {
+    OrderID      string `json:"order_id" jsonschema:"The order ID, e.g. ORD-20260101-001."`  // 必填
+    IncludeItems bool   `json:"include_items,omitempty" jsonschema:"Whether to include item details."` // 可选
+}
+```
+
+规则很简单：带 `omitempty` → 可选参数，不带 `omitempty` → 必填参数。
+
+### 返回值设计模式
+
+```go
+// 方式一：返回结构体（推荐，类型安全）
+type orderResult struct {
+    Status   string  `json:"status"`
+    Amount   float64 `json:"amount"`
+    Currency string  `json:"currency"`
+}
+
+func lookupOrder(ctx tool.Context, args queryOrderArgs) (orderResult, error) {
+    // ...
+}
+
+// 方式二：返回 map（灵活，适合动态字段）
+func flexibleQuery(ctx tool.Context, args queryArgs) (map[string]any, error) {
+    result := map[string]any{
+        "status": "found",
+        "data":   someDynamicData,
+    }
+    return result, nil
+}
+
+// 方式三：返回指针（允许 nil 表示"未找到"）
+func findUser(ctx tool.Context, args findUserArgs) (*userResult, error) {
+    user, err := db.FindUser(args.UserID)
+    if err != nil {
+        return nil, err
+    }
+    if user == nil {
+        return nil, nil  // 返回 nil 表示未找到，不是错误
+    }
+    return &userResult{Name: user.Name, Email: user.Email}, nil
+}
+```
+
 ### Declaration() 与 Run()
 
 - **`Declaration()`**：生成 `genai.FunctionDeclaration`，包含名称、描述和参数/返回值的 JSON Schema。若 `IsLongRunning` 为 `true`，会自动追加长运行操作的提示说明
@@ -163,7 +230,45 @@ tool, _ := functiontool.New(functiontool.Config{
         return args.Environment == "production"
     },
 }, deployService)
+
+// 级别三：高级确认（带自定义 payload）
+func requestTimeOff(ctx tool.Context, args timeOffArgs) (map[string]any, error) {
+    confirmation := ctx.ToolConfirmation()
+    if confirmation == nil {
+        // 首次调用：请求人工确认，附带自定义数据
+        ctx.RequestConfirmation(
+            "请审批请假申请："+args.Reason,
+            map[string]any{"approved_days": 0},
+        )
+        return map[string]any{"status": "等待主管审批..."}, nil
+    }
+
+    // 第二次调用：已收到确认结果
+    payload := confirmation.Payload.(map[string]any)
+    approvedDays := int(payload["approved_days"].(float64))
+    approvedDays = min(approvedDays, args.Days)
+
+    if approvedDays == 0 {
+        return map[string]any{"status": "请假被拒绝", "approved_days": 0}, nil
+    }
+
+    return map[string]any{
+        "status":        "审批通过",
+        "approved_days": approvedDays,
+    }, nil
+}
 ```
+
+**确认工作流程**：
+
+```
+用户请求 → Agent 调用工具 → 工具发现需要确认
+  → 返回确认请求（带 payload）→ 用户在前端审批
+  → 用户响应 → Agent 再次调用工具（带确认结果）
+  → 工具读取确认结果 → 执行实际操作
+```
+
+> ⚠️ **已知限制**：Tool Confirmation 目前为**实验性功能**，`DatabaseSessionService` 和 `VertexAiSessionService` 不支持。
 
 ### StreamingFunctionTool
 
@@ -179,7 +284,29 @@ func NewStreaming[TArgs any](cfg Config, handler StreamingFunc[TArgs]) (tool.Too
 
 ### Tool Context 实战
 
-`tool.Context`（通过 `agent.CallbackContext` 继承）提供了丰富的运行时能力。以下是常见场景的代码示例：
+`tool.Context` 不只是一个普通的 context——它是功能丰富的"工具箱"。继承链如下：
+
+```
+context.Context                    ← 标准 Go context
+  └── agent.ReadonlyContext        ← 只读上下文
+        ├── UserID()               ← 当前用户 ID
+        ├── SessionID()            ← 当前会话 ID
+        ├── AppName()              ← 应用名称
+        ├── AgentName()            ← 当前 Agent 名称
+        ├── UserContent()          ← 用户原始消息
+        └── ReadonlyState()        ← 只读状态
+  └── agent.CallbackContext        ← 可写上下文
+        ├── State()                ← 读写会话状态
+        └── Artifacts()            ← 产物管理
+  └── tool.Context                 ← Tool 专属
+        ├── FunctionCallID()       ← 本次调用 ID
+        ├── Actions()              ← 流程控制（转移 Agent 等）
+        ├── SearchMemory()         ← 搜索长期记忆
+        ├── ToolConfirmation()     ← 人工确认状态
+        └── RequestConfirmation()  ← 请求人工确认
+```
+
+以下是常见场景的代码示例：
 
 #### 读写状态
 
@@ -202,17 +329,81 @@ func updatePreference(ctx tool.Context, args updatePrefArgs) (*updatePrefResult,
 }
 ```
 
-#### Agent 转移
+**状态作用域规则**：
+
+| 前缀 | 作用域 | 生命周期 | 示例 |
+|------|--------|----------|------|
+| 无前缀 | 当前会话 | 会话存续期间 | `"last_query"` |
+| `app:` | 应用级 | 跨用户共享 | `"app:maintenance_mode"` |
+| `user:` | 用户级 | 跨会话持久化 | `"user:preferences"` |
+| `temp:` | 临时 | 不持久化 | `"temp:calc_step"` |
+
+**实战：工具间传递数据**
 
 ```go
-func routeRequest(ctx tool.Context, args routeArgs) (routeResult, error) {
-    if strings.Contains(strings.ToLower(args.Query), "退款") {
-        ctx.Actions().TransferToAgent = "refund_agent"  // 转移到退款 Agent
-        return routeResult{Status: "transferring"}, nil
+func queryOrder(ctx tool.Context, args queryOrderArgs) (orderResult, error) {
+    order, err := db.GetOrder(args.OrderID)
+    if err != nil {
+        return orderResult{}, err
     }
-    return routeResult{Status: "handled"}, nil
+
+    // 把查询结果存入状态，供后续工具使用
+    ctx.State().Set("last_order_id", args.OrderID)
+    ctx.State().Set("last_order_amount", order.Amount)
+
+    return orderResult{
+        Status:   order.Status,
+        Amount:   order.Amount,
+        Currency: "CNY",
+    }, nil
+}
+
+func refundOrder(ctx tool.Context, args refundArgs) (refundResult, error) {
+    // 如果用户没指定订单 ID，使用上次查询的
+    orderID := args.OrderID
+    if orderID == "" {
+        val, _ := ctx.State().Get("last_order_id")
+        if val == nil {
+            return refundResult{}, fmt.Errorf("未找到订单，请先查询订单")
+        }
+        orderID = val.(string)
+    }
+
+    // 执行退款...
+    return refundResult{Status: "refunded", OrderID: orderID}, nil
 }
 ```
+
+#### Agent 转移
+
+`ctx.Actions().TransferToAgent` 让工具函数能动态改变 Agent 的执行流程：
+
+```go
+func handleInquiry(ctx tool.Context, args inquiryArgs) (inquiryResult, error) {
+    query := strings.ToLower(args.Query)
+
+    switch {
+    case strings.Contains(query, "退款") || strings.Contains(query, "退货"):
+        ctx.Actions().TransferToAgent = "refund_agent"
+        return inquiryResult{Status: "正在转接退款专员..."}, nil
+
+    case strings.Contains(query, "投诉") || strings.Contains(query, "差评"):
+        ctx.Actions().TransferToAgent = "complaint_agent"
+        return inquiryResult{Status: "正在转接投诉专员..."}, nil
+
+    default:
+        return inquiryResult{Status: "handled", Response: "已为您处理"}, nil
+    }
+}
+```
+
+`EventActions` 支持的字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `TransferToAgent` | string | 转移到指定 Agent |
+| `Escalate` | bool | 上报给父 Agent |
+| `SkipSummarization` | bool | 跳过 LLM 对工具结果的摘要 |
 
 #### Artifacts 产物管理
 
@@ -497,3 +688,171 @@ agent, _ := agent.New(agent.Config{
     },
 })
 ```
+
+## 10. Agent-as-a-Tool 实战
+
+将一个 Agent 包装为工具，实现 Agent 间委托：
+
+```go
+import "google.golang.org/adk/tool/agenttool"
+
+// 创建一个专门做摘要的 Agent
+summarizer, _ := llmagent.New(llmagent.Config{
+    Name:        "summarizer",
+    Model:       model,
+    Instruction: "你是一个摘要专家。请对提供的内容生成简洁的摘要。",
+})
+
+// 将 Agent 包装为 Tool（SkipSummarization 避免双层摘要）
+summarizeTool := agenttool.New(summarizer, &agenttool.Config{
+    SkipSummarization: true,
+})
+
+// 在主 Agent 中使用
+mainAgent, _ := llmagent.New(llmagent.Config{
+    Name:  "main_agent",
+    Model: model,
+    Tools: []tool.Tool{
+        searchTool,
+        summarizeTool,  // 把摘要 Agent 当工具用
+    },
+})
+```
+
+## 11. 长运行工具
+
+有些工具需要较长时间执行（如创建工单后等待审批）。设置 `IsLongRunning: true` 启用"暂停-恢复"模式：
+
+```go
+createTicketTool, _ := functiontool.New(functiontool.Config{
+    Name:          "create_ticket",
+    Description:   "Create a support ticket and wait for approval.",
+    IsLongRunning: true,  // 标记为长运行工具
+}, func(ctx tool.Context, args createTicketArgs) (createTicketResult, error) {
+    // 创建工单
+    ticketID := createTicketInSystem(args.Title, args.Description)
+
+    // 返回初始结果，Agent 会暂停等待
+    return createTicketResult{
+        Status:   "pending_approval",
+        TicketID: ticketID,
+    }, nil
+})
+```
+
+长运行工具返回后，Agent 会暂停。应用后续通过 REST API 发送 `FunctionResponse`（带 `WillContinue` 标志）来继续执行。
+
+## 12. Skills 技能系统
+
+Skills 是 ADK v1.2.0 引入的**实验性功能**，把指令、工具和参考资源打包成一个自包含的"技能包"。
+
+### Skill 目录结构
+
+```
+skills/
+    weather-skill/
+        SKILL.md              # 必需：技能描述 + 指令
+        references/           # 参考文档
+            city-list.txt
+        assets/               # 资源文件
+        scripts/              # 脚本
+```
+
+`SKILL.md` 示例：
+
+```markdown
+---
+name: weather-assistant
+description: 提供城市天气查询和历史天气分析能力
+---
+
+## 使用说明
+
+当用户询问天气相关问题时，按以下步骤操作：
+
+1. 使用 get_city_weather 工具获取当前天气
+2. 如果用户问历史天气，使用 get_historical_weather 工具
+3. 回复时包含温度、天气描述和穿衣建议
+
+## 注意事项
+
+- 温度低于 10°C 时提醒用户注意保暖
+- 温度高于 35°C 时提醒用户注意防暑
+```
+
+### 在 Go 代码中使用 Skills
+
+```go
+import (
+    "google.golang.org/adk/tool/skilltoolset"
+    "google.golang.org/adk/tool/skilltoolset/skill"
+)
+
+skillToolset, err := skilltoolset.New(ctx, skilltoolset.Config{
+    Source: skill.NewFileSystemSource(os.DirFS("./skills")),
+})
+
+// 绑定到 Agent（注意用 Toolsets，不是 Tools）
+agent, _ := llmagent.New(llmagent.Config{
+    Name:     "skill_agent",
+    Model:    model,
+    Toolsets: []tool.Toolset{skillToolset},
+})
+```
+
+## 13. Tools vs Toolsets
+
+| 维度 | Tools | Toolsets |
+|------|-------|----------|
+| 定义方式 | `[]tool.Tool{tool1, tool2}` | `[]tool.Toolset{toolset1}` |
+| 工具列表 | 固定不变 | **可动态变化** |
+| 过滤能力 | 无 | 支持 Predicate 按条件过滤 |
+| 适用场景 | 工具数量少且固定 | Skills、MCP、动态权限控制 |
+
+```go
+// Tools：简单的固定工具列表
+agent, _ := llmagent.New(llmagent.Config{
+    Tools: []tool.Tool{searchTool, calcTool, emailTool},
+})
+
+// Toolsets：动态过滤（根据用户角色暴露不同工具）
+agent, _ := llmagent.New(llmagent.Config{
+    Toolsets: []tool.Toolset{
+        tool.FilterToolset(myToolset, tool.AllowedToolsPredicate([]string{"search", "calc"})),
+    },
+})
+```
+
+## 14. 常见问题与踩坑指南
+
+**Q：jsonschema tag 写错了会怎样？**
+
+A：LLM 会误解参数含义，导致传错参数或调用失败。这是自定义 Tool 最常见的 bug 来源。建议每次修改 tag 后测试 Agent 的工具调用是否正确。
+
+**Q：Tool 函数里能调用数据库吗？**
+
+A：可以。Tool 函数就是普通的 Go 函数，你可以做任何操作——调用 HTTP API、查询数据库、读写文件、发送消息。但要注意**超时处理**，LLM 等待工具响应的时间是有限的。
+
+**Q：一个 Agent 能挂多少个 Tool？**
+
+A：没有硬性限制，但 LLM 的工具选择能力会随着工具数量增加而下降。建议不超过 10-15 个工具。如果工具太多，考虑用多 Agent 架构（每个 Agent 只负责一类工具）。
+
+**Q：OpenAPI Tools 支持 Go 吗？**
+
+A：目前不支持。ADK-Go 无法直接从 OpenAPI spec 自动生成 Tool。替代方案：手动定义 FunctionTool，或使用 MCP Tools。
+
+**Q：Tool 性能优化怎么做？**
+
+A：Go 天然支持 goroutine 并发，Tool 函数内部可以使用 goroutine 并行调用多个 API。虽然 ADK-Go 不保证自动并行执行多个 tool call，但你可以通过在 Tool 函数内使用并发来优化。
+
+## 15. functiontool.Config 速查
+
+| 参数 | 说明 |
+|------|------|
+| `Name` | 工具名称，LLM 通过此名称调用 |
+| `Description` | 工具描述，**决定 LLM 调用准确性** |
+| `IsLongRunning` | 长运行工具标记 |
+| `RequireConfirmation` | 始终需要确认 |
+| `RequireConfirmationProvider` | 动态确认判断函数 `func(TArgs) bool` |
+| `InputSchema` | 手动指定输入 Schema（默认从 tag 推断） |
+| `OutputSchema` | 手动指定输出 Schema |
