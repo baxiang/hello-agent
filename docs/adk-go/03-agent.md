@@ -257,7 +257,137 @@ agent, _ := llmagent.New(llmagent.Config{
 
 ### Live 模式
 
-LLMAgent 通过 `RunLive()` 支持双向流式通信，返回 `(LiveSession, iter.Seq2[*session.Event, error], error)` 三元组。`LiveSession` 接口提供 `Send(LiveRequest)` 和 `Close()` 方法，允许在 Agent 运行期间持续发送消息（文本、音频、函数响应等），适用于实时对话场景。
+`RunLive()` 是 ADK-Go 最复杂的机制，专为语音对话、实时翻译等双向流式场景设计。
+
+#### 接口与调用
+
+```go
+// RunLive 返回三元组
+liveSession, eventIter, err := runner.RunLive(ctx, userID, sessionID, agent.LiveRunConfig{
+    ResponseModalities:       []genai.Modality{genai.ModalityAudio},
+    InputAudioTranscription:  &genai.AudioTranscriptionConfig{},
+    OutputAudioTranscription: &genai.AudioTranscriptionConfig{},
+    MaxLLMCalls:              100,
+})
+```
+
+- `liveSession` → 用于**发送**客户端消息到 Agent
+- `eventIter` → 用于**接收** Agent 产出的流式事件
+- `LiveRunConfig` → 音频、转录、重连等配置
+
+#### 传输层：WebSocket（非 gRPC）
+
+整个 `RunLive` 的传输链路分两层：
+
+```
+客户端（浏览器/App）
+    │  WebSocket ws://.../run_live?appName=X&userId=Y&sessionId=Z
+    ▼
+┌─────────────────────────────────────────┐
+│ adkrest REST API（WebSocket Handler）     │  ← 第一层：面向客户端的传输
+│   - HTTP Upgrade 到 WebSocket            │
+│   - 读取 goroutine: ws.ReadMessage()     │
+│     → liveSession.Send(LiveRequest)      │
+│   - 主 goroutine: eventIter              │
+│     → ws.WriteJSON(event)                │
+└──────────────┬──────────────────────────┘
+               │ channel
+               ▼
+┌─────────────────────────────────────────┐
+│ liveSessionImpl（Channel 双向管道）       │  ← 第二层：ADK 内部中转
+│   inputCh  ← LiveRequest（来自客户端）     │
+│   outputCh → eventOrError（来自模型）      │
+│   done     → 关闭信号                     │
+└──────────────┬──────────────────────────┘
+               │ genai.Client.Live.Connect()
+               ▼
+┌─────────────────────────────────────────┐
+│ Gemini Live API（底层 gRPC 双向流）       │  ← 第三层：模型连接
+│   这是 google.golang.org/genai 库内部实现  │
+│   ADK-Go 不暴露 gRPC 服务端，只消费客户端  │
+└─────────────────────────────────────────┘
+```
+
+**三层总结**：
+
+| 层 | 协议 | 角色 | 实现位置 |
+|----|------|------|----------|
+| 客户端 ↔ ADK | **WebSocket** | ADK 作为服务端 | `server/adkrest/controllers/runtime.go:247` |
+| ADK 内部 | **Go Channel** | `liveSessionImpl` 管道 | `internal/llminternal/base_flow.go:134` |
+| ADK ↔ Gemini | **gRPC**（genai 库内部） | ADK 作为客户端 | `google.golang.org/genai` |
+
+**没有原生 gRPC 服务端实现**。`agentengine` 包只支持 SSE 单向流式（`Runner.Run()`），不支持 `RunLive`。双向流式只能通过 WebSocket。
+
+#### 核心实现：liveSessionImpl
+
+```go
+type liveSessionImpl struct {
+    inputCh  chan agent.LiveRequest    // 客户端 → 模型
+    outputCh chan eventOrError         // 模型 → 客户端
+    done     chan struct{}             // 关闭信号
+    closeOnce sync.Once
+}
+
+// Send 由客户端 goroutine 调用，写入消息
+func (s *liveSessionImpl) Send(req agent.LiveRequest) error {
+    select {
+    case s.inputCh <- req:   // 非阻塞地发送给模型写 goroutine
+        return nil
+    case <-s.done:
+        return io.EOF
+    }
+}
+
+// recvIter 将 outputCh 包装为 iter.Seq2 迭代器
+func (s *liveSessionImpl) recvIter() iter.Seq2[*session.Event, error] {
+    return func(yield func(*session.Event, error) bool) {
+        for {
+            select {
+            case res := <-s.outputCh:
+                if !yield(res.event, res.err) { return }
+            case <-s.done:
+                return
+            }
+        }
+    }
+}
+```
+
+**为什么用 Channel 而非直接迭代器？**
+- `Send()` 是**写操作**，从客户端 goroutine 调用
+- 模型连接运行在**独立 goroutine** 中，持续读取和写入
+- Channel 是 goroutine 之间最自然的通信方式，天然支持并发安全
+- 迭代器负责将 channel 输出转为 `for-range` 可消费的形式
+
+#### Goroutine 协作模型
+
+`Flow.RunLive()` 内部的 goroutine 架构：
+
+```
+主 goroutine（Flow.RunLive 内部）
+  ├── 读 goroutine:   liveConn.Recv() → eventsChan → outputCh → 客户端
+  ├── 写 goroutine:   inputCh → liveConn.SendContent()/SendRealtime() → Gemini
+  └── 主循环: 处理事件、工具调用、缓存刷新、重连逻辑
+```
+
+**关键特性**：
+- **自动重连**：检测 EOF/broken pipe/connection reset 等断连错误后自动重建连接，支持 `SessionResumptionHandle` 恢复会话状态
+- **时间戳排序**：音频转录与工具调用按时间顺序排列——转录中的工具调用先缓存，转录完成后再释放，保证对话时序
+- **内联工具调用**：Live 模式中的函数调用在主循环中直接执行，响应通过同一连接发回 Gemini
+
+#### RunLive 接口不在公开 Agent 接口中
+
+`RunLive` 通过运行时的类型断言检查，而非编译时的接口约束：
+
+```go
+// runner/runner.go:363
+lAgent, ok := agentToRun.(liveAgent)
+if !ok {
+    return nil, nil, fmt.Errorf("agent %s does not support Live Run", agentToRun.Name())
+}
+```
+
+目前只有 `llmAgent` 和 `sequentialAgent` 实现了 `liveAgent`。
 
 ### 结构化输出（OutputSchema）
 
