@@ -5,7 +5,7 @@
 开始使用 ADK-Go 之前，请确保你的开发环境满足以下要求：
 
 - **Go 1.23+**：ADK-Go 使用了 Go 1.23 引入的 `iter.Seq2` 迭代器协议，需要较新的 Go 版本。
-- **Google API Key**：用于访问 Gemini 模型。在 [Google AI Studio](https://aistudio.google.com/) 获取。
+- **DeepSeek API Key**：用于访问 DeepSeek 模型。在 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取。
 - **安装依赖**：
 
 ```bash
@@ -15,7 +15,7 @@ go get google.golang.org/adk@latest
 设置环境变量：
 
 ```bash
-export GOOGLE_API_KEY="your-api-key-here"
+export DEEPSEEK_API_KEY="your-api-key-here"
 ```
 
 ## 最简示例
@@ -27,6 +27,7 @@ package main
 
 import (
     "context"
+    "iter"
     "log"
     "os"
 
@@ -36,21 +37,41 @@ import (
     "google.golang.org/adk/agent/llmagent"
     "google.golang.org/adk/cmd/launcher"
     "google.golang.org/adk/cmd/launcher/full"
-    "google.golang.org/adk/model/gemini"
+    "google.golang.org/adk/model"
     "google.golang.org/adk/tool"
-    "google.golang.org/adk/tool/geminitool"
+    "google.golang.org/adk/tool/functiontool"
 )
+
+// ---------- DeepSeek 自定义模型实现 ----------
+
+// DeepSeekModel 实现 model.LLM 接口，对接 DeepSeek API。
+// ADK-Go 内置了 Gemini 实现，对于其他模型只需实现 model.LLM 接口即可接入。
+type DeepSeekModel struct {
+    name   string
+    apiKey string
+}
+
+func NewDeepSeekModel(name, apiKey string) model.LLM {
+    return &DeepSeekModel{name: name, apiKey: apiKey}
+}
+
+func (m *DeepSeekModel) Name() string { return m.name }
+
+func (m *DeepSeekModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+    return func(yield func(*model.LLMResponse, error) bool) {
+        // TODO: 调用 DeepSeek Chat API，将 genai.Content 转换为 DeepSeek 请求格式
+        // POST https://api.deepseek.com/chat/completions
+        // 参考: https://platform.deepseek.com/api-docs
+    }
+}
+
+// ---------- 主程序 ----------
 
 func main() {
     ctx := context.Background()
 
-    // 创建 Gemini 模型实例
-    model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
-        APIKey: os.Getenv("GOOGLE_API_KEY"),
-    })
-    if err != nil {
-        log.Fatalf("创建模型失败: %v", err)
-    }
+    // 创建 DeepSeek 模型实例
+    model := NewDeepSeekModel("deepseek-chat", os.Getenv("DEEPSEEK_API_KEY"))
 
     // 创建 LLM Agent
     a, err := llmagent.New(llmagent.Config{
@@ -58,9 +79,7 @@ func main() {
         Model:       model,
         Description: "Agent to answer questions about the time and weather in a city.",
         Instruction: "Your SOLE purpose is to answer questions about the current time and weather in a specific city. You MUST refuse to answer any questions unrelated to time or weather.",
-        Tools: []tool.Tool{
-            geminitool.GoogleSearch{}, // 内置 Google 搜索工具
-        },
+        Tools:       []tool.Tool{},  // 通过自定义 FunctionTool 扩展能力
     })
     if err != nil {
         log.Fatalf("创建 Agent 失败: %v", err)
@@ -80,9 +99,9 @@ func main() {
 
 ### 代码解析
 
-1. **创建模型**：`gemini.NewModel()` 接受模型名称和客户端配置，返回实现了 `model.LLM` 接口的实例。
+1. **自定义模型**：通过实现 `model.LLM` 接口接入 DeepSeek。ADK-Go 设计为模型无关，只需实现 `Name()` 和 `GenerateContent()` 两个方法即可接入任意 LLM。
 2. **创建 Agent**：`llmagent.New()` 是最常用的 Agent 构造器，需要指定名称、模型、描述和指令。
-3. **配置工具**：`Tools` 字段接受 `[]tool.Tool` 切片，这里使用了内置的 `GoogleSearch`。
+3. **配置工具**：`Tools` 字段接受 `[]tool.Tool` 切片，可通过 `functiontool.New()` 创建自定义工具。
 4. **启动运行**：`full.NewLauncher()` 创建一个支持多种运行模式的启动器，`Execute()` 根据命令行参数选择运行方式。
 
 ## 自定义 FunctionTool
@@ -95,6 +114,7 @@ package main
 import (
     "context"
     "fmt"
+    "iter"
     "log"
     "os"
 
@@ -104,11 +124,23 @@ import (
     "google.golang.org/adk/agent/llmagent"
     "google.golang.org/adk/cmd/launcher"
     "google.golang.org/adk/cmd/launcher/full"
-    "google.golang.org/adk/model/gemini"
+    "google.golang.org/adk/model"
     "google.golang.org/adk/tool"
     "google.golang.org/adk/tool/functiontool"
-    "google.golang.org/adk/tool/geminitool"
 )
+
+// DeepSeek 自定义模型（省略实现，同上）
+type DeepSeekModel struct {
+    name   string
+    apiKey string
+}
+func NewDeepSeekModel(name, apiKey string) model.LLM {
+    return &DeepSeekModel{name: name, apiKey: apiKey}
+}
+func (m *DeepSeekModel) Name() string { return m.name }
+func (m *DeepSeekModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+    return func(yield func(*model.LLMResponse, error) bool) {}
+}
 
 // 定义工具参数结构体，字段需要有 json tag
 type getWeatherArgs struct {
@@ -123,12 +155,7 @@ type weatherResult struct {
 func main() {
     ctx := context.Background()
 
-    model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
-        APIKey: os.Getenv("GOOGLE_API_KEY"),
-    })
-    if err != nil {
-        log.Fatalf("创建模型失败: %v", err)
-    }
+    model := NewDeepSeekModel("deepseek-chat", os.Getenv("DEEPSEEK_API_KEY"))
 
     // 创建自定义 FunctionTool
     weatherTool, err := functiontool.New(functiontool.Config{
@@ -151,7 +178,6 @@ func main() {
         Instruction: "You help users check the weather in different cities.",
         Tools: []tool.Tool{
             weatherTool,
-            geminitool.GoogleSearch{},
         },
     })
     if err != nil {

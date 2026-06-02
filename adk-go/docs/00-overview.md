@@ -6,6 +6,31 @@ ADK-Go（Agent Development Kit for Go）是 Google 开源的语言优先（Langu
 
 ADK-Go 的核心目标是让 Go 开发者能够以惯用的 Go 风格来构建 AI Agent，而非简单地将 Python 版本的概念翻译过来。项目充分利用了 Go 1.23+ 引入的迭代器协议（`iter.Seq2`）、接口组合等语言特性，使得 Agent 的定义与编排既类型安全又富有表现力。
 
+### 什么是 AI Agent？
+
+如果你想用 AI 帮你自动查天气、分析数据、管理日程——不是那种"你问一句它答一句"的聊天机器人，而是能**自主思考、调用工具、完成复杂任务**的智能体，这就是 **AI Agent（智能体）**。
+
+打个比方：如果大模型（如 DeepSeek、Gemini、GPT）是一个"大脑"，那 ADK 就是给这个大脑装上：
+
+- **"手脚"（工具）**：让 Agent 调用外部 API、数据库、搜索引擎
+- **"记事本"（记忆）**：跨会话的记忆与上下文管理
+- **"团队协作系统"（多 Agent）**：多个 Agent 之间相互发现、委托、协作
+
+你不需要从零实现这些能力，ADK 全都帮你准备好了。
+
+### ADK 支持的语言
+
+ADK 是一个多语言 AI Agent 框架，目前支持四种语言：
+
+| 语言 | 版本 | 成熟度 |
+|------|------|--------|
+| Python | v2.0 Beta | ⭐⭐⭐⭐⭐ 最成熟，支持 Workflows、Agent Teams |
+| TypeScript | v1.0 | ⭐⭐⭐⭐ 稳定版 |
+| **Go** | **v1.2.0** | **⭐⭐⭐ 功能完整，快速发展中** |
+| Java | 持续更新 | ⭐⭐⭐ 积极开发中 |
+
+本系列聚焦 **Go 版本**。为什么选 Go？因为 Go 天生适合构建高性能后端服务，如果你要做"一个人用 AI 做一家全球化公司"，Go + ADK 是非常理想的技术组合。
+
 ## 设计哲学
 
 ADK-Go 的设计围绕以下核心原则展开：
@@ -13,7 +38,7 @@ ADK-Go 的设计围绕以下核心原则展开：
 - **Code-First（代码优先）**：所有 Agent、Tool、配置均通过 Go 代码定义，而非依赖 YAML/JSON 等外部声明式配置。这意味着你可以充分利用 IDE 的自动补全、类型检查和重构能力。
 - **模块化（Modular）**：每个核心功能（会话、记忆、制品、模型）都被拆分为独立的包，你可以按需引入，也可以替换默认实现。
 - **可组合（Composable）**：Agent 支持嵌套组合——LLMAgent、SequentialAgent、ParallelAgent、LoopAgent 可以自由编排，形成复杂的 Agent 树。
-- **模型无关（Model-Agnostic）**：通过 `model.LLM` 接口抽象 LLM 调用，目前已内置 Gemini 支持，也可自行适配其他模型。
+- **模型无关（Model-Agnostic）**：通过 `model.LLM` 接口抽象 LLM 调用，内置了 Gemini 实现，可通过接口轻松接入 DeepSeek、OpenAI 等任意模型。
 - **部署无关（Deployment-Agnostic）**：支持 Console、REST API、A2A 协议、Web UI 等多种运行模式，可运行在本地开发机，也可部署到云端。
 
 ## 核心概念
@@ -122,13 +147,70 @@ ADK-Go 特别适合以下场景：
 
 Go 版本最大的特色在于：所有核心接口的返回值都使用 `iter.Seq2`，这是一种惰性迭代器，消费者可以随时中断，天然适配 LLM 的流式输出和工具调用循环。
 
+## ADK vs 竞品框架
+
+市面上 AI Agent 框架已经很多了，ADK 到底有什么不同？
+
+### 主流 Agent 框架对比
+
+| 维度 | **ADK (Google)** | LangChain/LangGraph | CrewAI | AutoGen (Microsoft) | Dify | Coze (字节) | OpenAI Agents SDK |
+|------|-----------|---------------------|--------|---------------------|------|------------|-------------------|
+| **定位** | 全能 Agent 框架 | 全能 Agent 框架 | 多 Agent 协作 | 多 Agent 框架 | 可视化 AI 平台 | Bot 开发平台 | 轻量 Agent SDK |
+| **支持语言** | **Go/Python/TS/Java** | Python/JS | Python | Python/.NET | Web 平台 | 平台+API | Python/JS |
+| **开源** | Apache 2.0 | MIT | ✅ | MIT | Apache 2.0 | 闭源 | MIT |
+| **GitHub Stars** | 7.8k (Go) | 100k+ | 50.9k | 57.8k | 140.6k | N/A | 26.1k |
+| **模型绑定** | 模型无关（内置 Gemini，可扩展 DeepSeek 等） | 多模型 | 多模型 | OpenAI/Azure | 所有主流 | 平台绑定 | OpenAI 优先 |
+| **Agent 编排** | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ |
+| **Go 语言支持** | ✅ **原生** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **上手难度** | 低 | 中高 | 低 | 中 | 低 | 极低 | 低 |
+
+### ADK 的独特价值
+
+**1. 唯一同时原生支持 Go 的主流 Agent 框架**
+
+这是 ADK 最核心的差异化优势。如果你是 Go 开发者，想在现有 Go 服务中集成 AI Agent 能力，ADK-Go 是目前**唯一**成熟的选择。LangChain、CrewAI、AutoGen、OpenAI Agents SDK 都不支持 Go。
+
+这意味着你可以把 AI Agent 直接嵌入到你的 PocketBase 后端、Go 微服务、CLI 工具中，不需要引入 Python 运行时，不需要额外的服务间通信。
+
+**2. 模型无关 + DeepSeek/Gemini 深度集成**
+
+ADK 对 Google Gemini 模型和 DeepSeek 模型的集成都很友好——内置了 Gemini 实现，同时通过 `model.LLM` 接口可轻松接入 DeepSeek。Gemini 的 Google Search Grounding、Code Execution、Vertex AI 等能力开箱即用；DeepSeek 则通过实现接口即可无缝接入。
+
+**3. 标准协议先行：MCP + A2A**
+
+ADK 原生支持两大标准协议：
+- **MCP（Model Context Protocol）**：让 Agent 调用外部工具和数据源
+- **A2A（Agent-to-Agent）**：让不同 Agent 之间互相发现和协作
+
+你用 ADK 构建的 Agent，可以和任何支持这些协议的第三方 Agent 互通，不会被锁定在某个平台里。
+
+**4. 简洁的设计哲学**
+
+相比 LangChain 的"概念爆炸"（Chain、Agent、Tool、Retriever、Memory、Callback... 几十个抽象层），ADK 的核心概念只有三个：**Agent、Tool、Runner**。三个概念就覆盖了从简单到复杂的全部场景，学习曲线非常平缓。
+
+**5. 真正的"代码优先"**
+
+Dify、Coze 这类平台虽然上手快，但本质上是"用别人的平台"。你的 Agent 逻辑、数据、用户都跑在别人的服务器上。ADK 是纯代码框架，你的代码跑在你自己的基础设施上，完全可控。
+
+### 选型建议
+
+| 你的需求 | 推荐框架 |
+|----------|----------|
+| **Go 后端集成 AI Agent** | ✅ **ADK-Go**（唯一选择） |
+| 需要最灵活的图编排 | LangGraph |
+| 角色扮演式多 Agent 协作 | CrewAI |
+| 非技术人员快速搭建 AI 应用 | Dify / Coze |
+| 以 OpenAI 模型为核心 | OpenAI Agents SDK |
+| 微软 .NET 技术栈企业 | Semantic Kernel |
+| 现有 AutoGen 项目维护 | AutoGen（⚠️ 已进入维护模式） |
+
 ## 模块一览表
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
 | agent | `agent/` | Agent 核心接口与基类，包含 llmagent、workflowagents 子包 |
 | runner | `runner/` | 运行器，编排 Agent 执行与事件管理 |
-| model | `model/` | LLM 接口定义与 Gemini 实现 |
+| model | `model/` | LLM 接口定义，内置 Gemini 实现，可通过接口接入 DeepSeek |
 | tool | `tool/` | Tool 接口与内置工具（functiontool、geminitool、agenttool） |
 | session | `session/` | 会话管理与事件模型 |
 | memory | `memory/` | 跨会话记忆服务 |
@@ -138,3 +220,21 @@ Go 版本最大的特色在于：所有核心接口的返回值都使用 `iter.S
 | telemetry | `telemetry/` | 可观测性（OpenTelemetry 集成） |
 | cmd | `cmd/` | 命令行工具（launcher） |
 | examples | `examples/` | 官方示例集合 |
+
+## 常见问题
+
+**Q：ADK-Go 支持 DeepSeek、OpenAI、Claude 等非 Gemini 模型吗？**
+
+A：ADK 设计上是模型无关的（通过 `model.LLM` 接口抽象）。目前 Go 版本内置了 Gemini 实现，DeepSeek、OpenAI 等模型可通过实现 `model.LLM` 接口接入（参考本文档 05-model 章节的 DeepSeek 实战示例）。Python 版本通过 LiteLLM 已经支持 100+ 模型。
+
+**Q：ADK-Go 适合生产环境吗？**
+
+A：目前 v1.2.0，核心功能（Agent、Tool、Runner、Session）已经稳定，可以用于生产。但 A2A、Agent Config 等功能还处于实验阶段，使用时需要注意。
+
+**Q：Go 版本和 Python 版本功能差距大吗？**
+
+A：有差距。Python 是最成熟的（v2.0 Beta，支持 Workflows、Agent Teams、Evaluation 等），Go 版本目前覆盖了核心功能但缺少一些高级特性（如 Evaluation 框架）。不过 Go 版本在快速追赶中。
+
+**Q：ADK 和 LangChain Go (langchaingo) 有什么区别？**
+
+A：LangChain Go 是社区维护的 LangChain 移植版，主要聚焦 RAG 和 Chain 抽象。ADK-Go 是 Google 官方维护，聚焦 Agent 开发，提供了更完整的 Agent 编排（多 Agent、工作流）、运行时（Web/CLI/API）和协议支持（MCP/A2A）。

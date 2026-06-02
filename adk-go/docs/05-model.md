@@ -1,6 +1,6 @@
 # LLM 接入层
 
-LLM 接入层定义了 ADK-Go 与大语言模型交互的标准接口，并提供 Gemini 和 Apigee 两种内置实现。通过实现 `model.LLM` 接口，可以接入任意 LLM 提供商。
+LLM 接入层定义了 ADK-Go 与大语言模型交互的标准接口，内置了 Gemini 实现，同时通过 `model.LLM` 接口支持接入任意 LLM 提供商（如 DeepSeek、OpenAI 等）。
 
 ## 1. model.LLM 接口
 
@@ -13,7 +13,7 @@ type LLM interface {
 }
 ```
 
-- **`Name()`**：返回模型名称标识（如 `"gemini-2.5-flash"`），用于请求路由和日志
+- **`Name()`**：返回模型名称标识（如 `"deepseek-chat"`），用于请求路由和日志
 - **`GenerateContent()`**：核心生成方法，返回迭代器。`stream` 参数区分流式与非流式模式：
   - `stream == false`：迭代器仅 yield 一次完整响应
   - `stream == true`：迭代器逐步 yield 部分响应，最后 yield 完整响应
@@ -40,7 +40,7 @@ type LLMRequest struct {
 | `Config` | 生成配置（温度、Top-P、安全设置等） |
 | `Tools` | 工具映射，`json:"-"` 标记不参与 JSON 序列化 |
 
-`Contents` 遵循 Gemini API 的多轮对话格式，`Role` 字段区分 `user` 和 `model` 轮次。`Config` 中的工具声明应通过 ADK 的 `Tools` 字段配置而非直接设置。
+`Contents` 遵循 ADK 的多轮对话格式，`Role` 字段区分 `user` 和 `model` 轮次。`Config` 中的工具声明应通过 ADK 的 `Tools` 字段配置而非直接设置。
 
 ## 3. LLMResponse
 
@@ -107,11 +107,11 @@ Runner 在 Live 模式下使用这些字段实现事件排序：转录事件优�
 | `AvgLogprobs` | 平均对数概率，低值可能指示幻觉 |
 | `SessionResumptionHandle` | 会话恢复句柄，用于断线重连 |
 
-## 4. Gemini 模型实现
+## 4. 内置 Gemini 模型（参考）
 
-定义于 `source/model/gemini/gemini.go`，是 ADK-Go 的默认 LLM 实现。
+定义于 `source/model/gemini/gemini.go`，是 ADK-Go 默认内建的 LLM 实现。此处保留作为参考，本章后续以 **DeepSeek 自定义模型** 作为主要实战示例。
 
-### NewModel 创建
+### NewModel 创建（Gemini 专用）
 
 ```go
 model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
@@ -119,80 +119,153 @@ model, err := gemini.NewModel(ctx, "gemini-2.5-flash", &genai.ClientConfig{
 })
 ```
 
-创建过程：
-1. 通过 `genai.NewClient()` 创建底层客户端
-2. 注入 `mergeHeadersInterceptor` 到 HTTP Transport，确保自定义 header 被正确合并
-3. 生成版本 header：`google-adk/{version} gl-go/{goversion}`
+### Gemini 可用模型列表
 
-### GenerateContent 实现
+| 模型名称 | 特点 | 推荐场景 |
+|----------|------|----------|
+| `gemini-2.5-flash` | 最新、快速、便宜 | 日常开发首选 |
+| `gemini-2.5-pro` | 最强推理能力 | 复杂任务、需要深度思考 |
+| `gemini-2.0-flash` | 稳定版 | 生产环境 |
+| `gemini-2.0-flash-lite` | 最快最便宜 | 简单分类、提取等 |
 
-```go
-func (m *geminiModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error]
+## 5. DeepSeek 自定义模型接入（实战）
+
+ADK-Go 通过 `model.LLM` 接口支持接入任意 LLM。下面以 **DeepSeek** 为例，展示完整的自定义模型实现。
+
+### DeepSeek 模型列表
+
+| 模型名称 | 特点 | 推荐场景 |
+|----------|------|----------|
+| `deepseek-chat` | 最新、快速、便宜 | **日常开发首选** |
+| `deepseek-reasoner` | 最强推理能力（DeepSeek-R1） | 复杂任务、需要深度思考 |
+
+### API Key 认证
+
+在 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取 API Key：
+
+```bash
+export DEEPSEEK_API_KEY="sk-your-api-key"
+export DEEPSEEK_BASE_URL="https://api.deepseek.com"
 ```
 
-执行流程：
-1. **maybeAppendUserContent**：自动补全 user turn。若 Contents 为空，添加默认提示 "Handle the requests as specified in the System Instruction"；若最后一条 Content 的 Role 不是 `user`，添加 "Continue processing previous requests as instructed."
-2. 初始化 `Config` 和 `HTTPOptions`，调用 `addHeaders` 设置版本标识
-3. 根据 `stream` 参数选择 `generateStream` 或 `generate`
-
-### generateStream 流式生成
-
-使用 `llminternal.NewStreamingResponseAggregator()` 聚合流式响应：
+### 实现 model.LLM 接口
 
 ```go
-func (m *geminiModel) generateStream(ctx context.Context, req *model.LLMRequest) iter.Seq2[*model.LLMResponse, error] {
-    aggregator := llminternal.NewStreamingResponseAggregator()
+package deepseek
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "iter"
+    "net/http"
+
+    "google.golang.org/genai"
+
+    "google.golang.org/adk/model"
+)
+
+type DeepSeekModel struct {
+    name    string
+    apiKey  string
+    baseURL string
+}
+
+func New(name, apiKey, baseURL string) model.LLM {
+    return &DeepSeekModel{name: name, apiKey: apiKey, baseURL: baseURL}
+}
+
+func (m *DeepSeekModel) Name() string { return m.name }
+
+func (m *DeepSeekModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
     return func(yield func(*model.LLMResponse, error) bool) {
-        for resp, err := range m.client.Models.GenerateContentStream(...) {
-            // 将底层响应送入聚合器
-            for llmResponse, err := range aggregator.ProcessResponse(ctx, resp) {
-                if !yield(llmResponse, err) { return }
+        // 1. 将 genai.Content 转换为 DeepSeek Chat API 格式
+        messages := m.convertContents(req.Contents)
+
+        // 2. 构建 DeepSeek API 请求
+        body := map[string]any{
+            "model":    m.name,
+            "messages": messages,
+            "stream":   stream,
+        }
+
+        jsonBody, _ := json.Marshal(body)
+        httpReq, _ := http.NewRequestWithContext(ctx, "POST",
+            m.baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+        httpReq.Header.Set("Content-Type", "application/json")
+        httpReq.Header.Set("Authorization", "Bearer "+m.apiKey)
+
+        // 3. 发送请求，解析响应为 model.LLMResponse
+        resp, err := http.DefaultClient.Do(httpReq)
+        if err != nil {
+            yield(nil, err)
+            return
+        }
+        defer resp.Body.Close()
+
+        respBytes, _ := io.ReadAll(resp.Body)
+        // 解析 DeepSeek 响应为 LLMResponse...
+        llmResp := &model.LLMResponse{
+            Content: &genai.Content{
+                Role:  "model",
+                Parts: []*genai.Part{{Text: extractText(respBytes)}},
+            },
+        }
+        yield(llmResp, nil)
+    }
+}
+
+func (m *DeepSeekModel) convertContents(contents []*genai.Content) []map[string]string {
+    var messages []map[string]string
+    for _, c := range contents {
+        role := "user"
+        if c.Role == "model" {
+            role = "assistant"
+        }
+        for _, p := range c.Parts {
+            if p.Text != "" {
+                messages = append(messages, map[string]string{
+                    "role":    role,
+                    "content": p.Text,
+                })
             }
         }
-        // 聚合器关闭时产出最终完整响应
-        if closeResult := aggregator.Close(); closeResult != nil {
-            yield(closeResult, nil)
-        }
     }
+    return messages
 }
 ```
 
-聚合器负责将多个 partial 响应片段合并为有意义的 `LLMResponse`，处理函数调用的分段拼接等复杂逻辑。
-
-### mergeHeadersInterceptor
-
-HTTP RoundTripper 拦截器，解决 Go 标准库 `http.Header.Set` 覆盖而非合并的问题。对 `x-goog-api-client` 和 `user-agent` header，将多个值用空格合并后设置，确保 ADK 版本信息与底层 SDK 版本信息同时保留。
-
-### 版本标识
-
-每次请求携带 header：
-```
-x-goog-api-client: google-adk/1.2.0 gl-go/1.23.0
-user-agent: google-adk/1.2.0 gl-go/1.23.0
-```
-
-实际版本号由 `internal/version` 包的 `Version` 常量决定，当前值为 `1.2.0`。
-
-## 5. Apigee 模型
-
-定义于 `source/model/apigee/apigee.go`，通过 Apigee 代理网关访问 Gemini API：
+### 注册到 LLMAgent
 
 ```go
-model, err := apigee.NewModel(ctx, "apigee/gemini/gemini-2.5-flash",
-    apigee.WithProxyURL("https://my-apigee-proxy.example.com"),
+import "my-app/model/deepseek"
+
+model := deepseek.New(
+    "deepseek-chat",
+    os.Getenv("DEEPSEEK_API_KEY"),
+    os.Getenv("DEEPSEEK_BASE_URL"),
 )
+
+agent, err := llmagent.New(llmagent.Config{
+    Name:        "my_agent",
+    Model:       model,
+    Description: "使用 DeepSeek 模型的 Agent",
+    Instruction: "你是一个有帮助的助手。",
+})
 ```
 
-特性：
-- 模型名称格式：`apigee/gemini/{model_id}` 或 `apigee/vertex_ai/{model_id}`，支持 `apigee/{version}/{model_id}` 格式
-- 代理 URL 通过参数或 `APIGEE_PROXY_URL` 环境变量配置
-- 支持 Gemini API 和 Vertex AI 两种后端，后者需要 `GOOGLE_CLOUD_PROJECT` 和 `GOOGLE_CLOUD_LOCATION` 环境变量
-- 内部委托给 `gemini.NewModel`，通过自定义 `BaseURL` 和 header 将请求路由到 Apigee 代理
-- 支持通过 `WithCustomHeaders` 注入自定义 HTTP header
+### 实现要点
 
-## 6. 自定义 Model
+1. **Content 格式转换**：`genai.Content` 使用 `user`/`model` Role，需转换为 DeepSeek 的 `user`/`assistant` 格式
+2. **工具调用处理**：`genai.Part` 中的 `FunctionCall` 需转换为 DeepSeek 的 tool_calls 格式
+3. **流式响应**：DeepSeek 支持 SSE 流式，需逐步收集片段并聚合为 `LLMResponse`
+4. **错误处理**：yield `(nil, error)` 传递错误，LLMAgent 的 `OnModelErrorCallbacks` 会接收并处理
 
-实现 `model.LLM` 接口即可接入任意 LLM：
+## 6. 通用自定义 Model 模板
+
+除了 DeepSeek，你也可以用同样模式接入任何 LLM：
 
 ```go
 type myModel struct {
@@ -245,3 +318,15 @@ agent, err := llmagent.New(llmagent.Config{
     Instruction: "你是一个自定义模型驱动的助手。",
 })
 ```
+
+## 7. Go 版本已知限制
+
+| 功能 | Go 支持情况 | 说明 |
+|------|------------|------|
+| LlmAgent | ✅ 完整 | 全部 Config 参数可用 |
+| Gemini 模型（内置） | ✅ 完整 | API Key + Vertex AI |
+| DeepSeek 等第三方模型 | ✅ 可实现 | 通过 `model.LLM` 接口自定义接入 |
+| Ollama 本地模型 | ❌ 不支持 | 仅 Python 通过 LiteLLM 集成 |
+| Planner（计划器） | ❌ 不支持 | 仅 Python/Java |
+| CodeExecutor | ❌ 不支持 | 仅 Python/Java |
+| Interactions API | ❌ 不支持 | 仅 Python/Java |

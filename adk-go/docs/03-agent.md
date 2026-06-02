@@ -59,6 +59,57 @@ myAgent, err := agent.New(agent.Config{
 })
 ```
 
+### 实战示例：QAFlowAgent — 智能问答路由
+
+以下是一个完整的自定义 Agent 示例，展示分类→路由→处理的典型模式：
+
+```go
+type QAFlowAgent struct {
+    classifier   agent.Agent  // 分类器：判断问题类型
+    techAgent    agent.Agent  // 技术问题处理
+    generalAgent agent.Agent  // 通用问题处理
+}
+
+func (q *QAFlowAgent) Run(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+    return func(yield func(*session.Event, error) bool) {
+        // 第一步：运行分类器
+        for event, err := range q.classifier.Run(ctx) {
+            if err != nil { yield(nil, err); return }
+            if !yield(event, nil) { return }
+        }
+
+        // 第二步：根据分类结果选择子 Agent
+        category, _ := ctx.Session().State().Get("question_category")
+        var handler agent.Agent
+        if category == "technical" {
+            handler = q.techAgent
+        } else {
+            handler = q.generalAgent
+        }
+
+        // 第三步：运行选中的子 Agent
+        for event, err := range handler.Run(ctx) {
+            if err != nil { yield(nil, err); return }
+            if !yield(event, nil) { return }
+        }
+    }
+}
+
+func NewQAFlowAgent(classifier, tech, general agent.Agent) (agent.Agent, error) {
+    qa := &QAFlowAgent{
+        classifier:   classifier,
+        techAgent:    tech,
+        generalAgent: general,
+    }
+    return agent.New(agent.Config{
+        Name:        "qa_flow_agent",
+        Description: "智能问答路由：先分类再分发",
+        SubAgents:   []agent.Agent{classifier, tech, general},
+        Run:         qa.Run,
+    })
+}
+```
+
 ### Config 字段详解
 
 | 字段 | 类型 | 说明 |
@@ -96,7 +147,7 @@ LLMAgent 是 ADK-Go 最核心的 Agent 实现，基于大语言模型驱动，�
 agent, err := llmagent.New(llmagent.Config{
     Name:        "assistant",
     Description: "通用助手",
-    Model:       geminiModel,
+    Model:       deepseekModel,
     Instruction: "你是一个有帮助的助手，请用中文回答问题。",
     Tools:       []tool.Tool{searchTool, calcTool},
 })
@@ -148,6 +199,32 @@ Instruction: "用户名是 {user_name}，请根据 {artifact.report_data} 回答
 | `BeforeAgentCallbacks` | Agent 执行前回调（继承自基础 Agent） |
 | `AfterAgentCallbacks` | Agent 执行后回调（继承自基础 Agent） |
 
+**回调系统实战示例**：
+
+```go
+agent, _ := llmagent.New(llmagent.Config{
+    Name:  "monitored_agent",
+    Model: model,
+    Tools: []tool.Tool{myTool},
+    // 日志记录：每次 LLM 调用前记录请求
+    BeforeModelCallbacks: []llmagent.BeforeModelCallback{
+        func(ctx agent.CallbackContext, req *model.LLMRequest) (*model.LLMResponse, error) {
+            log.Printf("LLM 调用: 用户=%s, 消息数=%d", ctx.UserID(), len(req.Contents))
+            return nil, nil  // 返回 nil 表示不干预，继续执行
+        },
+    },
+    // 安全检查：工具调用前验证参数
+    BeforeToolCallbacks: []llmagent.BeforeToolCallback{
+        func(ctx tool.Context, t tool.Tool, args map[string]any) (map[string]any, error) {
+            log.Printf("工具调用: %s, 参数: %v", t.Name(), args)
+            return nil, nil  // 返回 nil 表示不修改，继续执行
+        },
+    },
+})
+```
+
+> **回调的返回值**：返回 `nil` 表示"不干预，继续执行"。返回修改后的对象可以改变请求/响应。返回 error 可以中断执行。
+
 #### 工具与输出
 
 | 字段 | 说明 |
@@ -181,6 +258,68 @@ Instruction: "用户名是 {user_name}，请根据 {artifact.report_data} 回答
 ### Live 模式
 
 LLMAgent 通过 `RunLive()` 支持双向流式通信，返回 `(LiveSession, iter.Seq2[*session.Event, error], error)` 三元组。`LiveSession` 接口提供 `Send(LiveRequest)` 和 `Close()` 方法，允许在 Agent 运行期间持续发送消息（文本、音频、函数响应等），适用于实时对话场景。
+
+### 结构化输出（OutputSchema）
+
+设置 `OutputSchema` 后，Agent **只能返回结构化 JSON 数据，不能调用工具或转移控制权**。适合需要确定性输出的场景：
+
+```go
+outputSchema := &genai.Schema{
+    Type:        genai.TypeObject,
+    Description: "城市天气信息",
+    Properties: map[string]*genai.Schema{
+        "city":    {Type: genai.TypeString, Description: "城市名"},
+        "weather": {Type: genai.TypeString, Description: "天气描述"},
+        "temp":    {Type: genai.TypeNumber, Description: "温度（摄氏度）"},
+    },
+}
+
+agent, _ := llmagent.New(llmagent.Config{
+    Name:         "weather_agent",
+    Model:        model,
+    OutputSchema: outputSchema,
+    OutputKey:    "weather_result",  // 结果自动写入 session state
+})
+```
+
+### 动态指令（InstructionProvider）
+
+`InstructionProvider` 可根据运行时上下文动态生成指令：
+
+```go
+agent, _ := llmagent.New(llmagent.Config{
+    Name:  "contextual_agent",
+    Model: model,
+    InstructionProvider: func(ctx agent.ReadonlyContext) (string, error) {
+        userTier := ctx.ReadonlyState().Get("user_tier")
+        if userTier == "premium" {
+            return "你是高级助手，提供详细专业的回答。", nil
+        }
+        return "你是基础助手，提供简洁易懂的回答。", nil
+    },
+})
+```
+
+### 无状态 Agent（IncludeContentsNone）
+
+```go
+statelessAgent, _ := llmagent.New(llmagent.Config{
+    Name:            "stateless_agent",
+    Model:           model,
+    IncludeContents: llmagent.IncludeContentsNone,
+})
+```
+
+### 状态 Key 前缀约定
+
+通过 `ctx.Session().State()` 读写状态时，ADK 使用 key 前缀区分作用域：
+
+| 前缀 | 作用域 | 持久化 | 示例 |
+|------|--------|--------|------|
+| （无前缀） | 当前会话 | ✅ | `"question_category"` |
+| `app:` | 应用级别（跨用户） | ✅ | `"app:global_config"` |
+| `user:` | 用户级别（跨会话） | ✅ | `"user:preferences"` |
+| `temp:` | 临时 | ❌ | `"temp:scratch_data"` |
 
 ## 4. Workflow Agents
 

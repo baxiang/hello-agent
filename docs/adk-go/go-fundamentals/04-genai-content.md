@@ -1,8 +1,8 @@
 # genai.Content 多模态消息 — ADK-Go 的数据流通货
 
-## 1. genai 包：Google 生成式 AI Go SDK 的基石
+## 1. genai 包：ADK-Go 消息格式的基石
 
-在深入 adk-go 之前，必须先理解它所依赖的上游包：`google.golang.org/genai`。这是 Google 官方提供的生成式 AI Go SDK，封装了与 Gemini API 的所有交互。adk-go 并没有重新定义消息格式，而是直接复用了 genai 包中的类型——**genai.Content** 和 **genai.Part** 就是整个框架中信息流转的核心数据结构。
+在深入 adk-go 之前，必须先理解它所依赖的上游包：`google.golang.org/genai`。这是 Google 官方提供的生成式 AI Go SDK，adk-go 直接复用了 genai 包中的类型——**genai.Content** 和 **genai.Part** 就是整个框架中信息流转的核心数据结构。无论你使用 DeepSeek、Gemini 还是其他模型，ADK-Go 内部的消息格式统一以 genai 类型表示。
 
 如果你来自其他 Go AI 框架（如 eino），可能会习惯框架自定义的 `schema.Message` 类型。但 adk-go 选择了另一条路：**直接拥抱 genai 包的类型系统**，减少了中间转换层，也意味着你必须对 genai 包的类型有清晰认识。
 

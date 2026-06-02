@@ -177,6 +177,102 @@ func NewStreaming[TArgs any](cfg Config, handler StreamingFunc[TArgs]) (tool.Too
 
 与 `FunctionTool` 不同，处理函数返回 `iter.Seq2[string, error]`，逐步 yield 文本片段，适用于实时输出场景（如逐字生成回答）。确认逻辑与 `FunctionTool` 完全一致。
 
+### Tool Context 实战
+
+`tool.Context`（通过 `agent.CallbackContext` 继承）提供了丰富的运行时能力。以下是常见场景的代码示例：
+
+#### 读写状态
+
+```go
+func updatePreference(ctx tool.Context, args updatePrefArgs) (*updatePrefResult, error) {
+    key := "user:preferences"
+
+    // 读取现有偏好
+    val, _ := ctx.State().Get(key)
+    prefs := map[string]string{}
+    if m, ok := val.(map[string]string); ok {
+        prefs = m
+    }
+
+    // 更新偏好
+    prefs[args.Preference] = args.Value
+    ctx.State().Set(key, prefs)
+
+    return &updatePrefResult{Status: "updated"}, nil
+}
+```
+
+#### Agent 转移
+
+```go
+func routeRequest(ctx tool.Context, args routeArgs) (routeResult, error) {
+    if strings.Contains(strings.ToLower(args.Query), "退款") {
+        ctx.Actions().TransferToAgent = "refund_agent"  // 转移到退款 Agent
+        return routeResult{Status: "transferring"}, nil
+    }
+    return routeResult{Status: "handled"}, nil
+}
+```
+
+#### Artifacts 产物管理
+
+```go
+func analyzeDocument(ctx tool.Context, args analyzeArgs) (*analyzeResult, error) {
+    // 加载用户上传的文档
+    doc, err := ctx.Artifacts().Load(ctx, args.FileName)
+    if err != nil {
+        return nil, fmt.Errorf("文档加载失败: %w", err)
+    }
+
+    // 处理文档...
+    analysis := processDoc(doc)
+
+    // 保存分析结果
+    part := genai.NewPartFromText(analysis)
+    ctx.Artifacts().Save(ctx, "analysis_result", part)
+
+    return &analyzeResult{Status: "done"}, nil
+}
+```
+
+#### 搜索长期记忆
+
+```go
+func answerWithMemory(ctx tool.Context, args queryArgs) (*answerResult, error) {
+    memoryResp, err := ctx.SearchMemory(ctx, args.Query)
+    if err != nil {
+        return nil, err
+    }
+
+    var context string
+    for _, m := range memoryResp.Memories {
+        context += m.Text + "\n"
+    }
+
+    return &answerResult{Context: context}, nil
+}
+```
+
+#### 人工确认（Human-in-the-Loop）
+
+```go
+func deleteRecord(ctx tool.Context, args deleteArgs) (*deleteResult, error) {
+    // 高风险操作前请求人工确认
+    if args.Force != true {
+        err := ctx.RequestConfirmation(
+            "即将删除记录 "+args.RecordID+"，确认删除？",
+            map[string]any{"record_id": args.RecordID},
+        )
+        if err != nil {
+            return nil, fmt.Errorf("操作已取消")
+        }
+    }
+
+    // 执行删除...
+    return &deleteResult{Status: "deleted"}, nil
+}
+```
+
 ## 3. AgentTool
 
 `AgentTool`（`source/tool/agenttool/agent_tool.go`）将一个 Agent 包装为工具，实现 Agent-as-Tool 模式，使 LLM 可以在工具调用中委托子任务给另一个 Agent。
@@ -335,3 +431,69 @@ confirmed := tool.WithConfirmation(myToolset, true, nil)
 ```
 
 它会遍历 Toolset 中的所有工具，对实现了 `runnableTool` 接口（提供 `Declaration()` 和 `Run()` 方法）的工具包装为 `confirmationTool`，在 `Run()` 中自动处理确认流程。未实现 `runnableTool` 的工具则原样保留。
+
+## 7. Events：Agent 的事件流
+
+Agent 的 `Run` 方法返回 `iter.Seq2[*session.Event, error]`——一个事件流。Runner 消费这些事件，将其转换为用户可见的输出。ADK 定义了多种事件类型：
+
+| 事件类型 | 说明 |
+|----------|------|
+| `ContentEvent` | Agent 生成的内容（文本、工具调用等） |
+| `StateEvent` | 状态变更 |
+| `ActionsEvent` | Agent 流程控制（转移、上报等） |
+| `ArtifactEvent` | 产物变更 |
+| `ErrorEvent` | 错误信息 |
+
+## 8. 核心包速查
+
+| 包 | 用途 |
+|----|------|
+| `google.golang.org/adk/agent` | Agent 接口和自定义 Agent |
+| `google.golang.org/adk/agent/llmagent` | LLM Agent |
+| `google.golang.org/adk/model` | 模型接口 |
+| `google.golang.org/adk/model/gemini` | Gemini 模型（内置实现） |
+| `google.golang.org/adk/tool/functiontool` | 函数工具 |
+| `google.golang.org/adk/tool/geminitool` | Gemini 内置工具（Google Search） |
+| `google.golang.org/adk/tool/agenttool` | Agent-as-a-Tool |
+| `google.golang.org/adk/tool/mcptoolset` | MCP 工具集 |
+| `google.golang.org/adk/session` | 会话和状态管理 |
+| `google.golang.org/adk/memory` | 长期记忆 |
+| `google.golang.org/adk/artifact` | 产物管理 |
+| `google.golang.org/adk/runner` | 运行时引擎 |
+| `google.golang.org/adk/cmd/launcher` | 启动器（基础） |
+| `google.golang.org/adk/cmd/launcher/full` | 全功能启动器（Web UI + API） |
+| `google.golang.org/genai` | Google GenAI SDK（底层模型 API） |
+
+## 9. 常用代码模板
+
+```go
+// 最小 LlmAgent
+agent, _ := llmagent.New(llmagent.Config{
+    Name:  "agent_name",
+    Model: model,
+})
+
+// 带工具的 LlmAgent
+agent, _ := llmagent.New(llmagent.Config{
+    Name:        "agent_name",
+    Model:       model,
+    Instruction: "系统提示词",
+    Tools:       []tool.Tool{myTool},
+})
+
+// 最小 FunctionTool
+tool, _ := functiontool.New(functiontool.Config{
+    Name:        "tool_name",
+    Description: "工具描述",
+}, myFunc)
+
+// 最小 Custom Agent
+agent, _ := agent.New(agent.Config{
+    Name: "custom_agent",
+    Run: func(ctx agent.InvocationContext) iter.Seq2[*session.Event, error] {
+        return func(yield func(*session.Event, error) bool) {
+            // 自定义逻辑
+        }
+    },
+})
+```

@@ -301,7 +301,7 @@ func New(opts ...PluginOption) (*plugin.Plugin, error) {
 - `ProxyURL`、`CustomHeaders`、`HTTPClient` 是可选参数，用 Option
 
 ```go
-m, err := apigee.NewModel(ctx, "apigee/gemini/gemini-2.0-flash",
+m, err := apigee.NewModel(ctx, "my-model-name",
     apigee.WithProxyURL("http://proxy.example.com"),
     apigee.WithCustomHeaders(headers),
 )
@@ -352,7 +352,7 @@ chatModel, _ := openai.NewChatModel(ctx, openai.WithModel("gpt-4"), openai.WithT
 // adk-go 风格：Config + Option
 myAgent, _ := llmagent.New(llmagent.Config{
     Name:        "assistant",
-    Model:       geminiModel,
+    Model:       deepseekModel,
     Instruction: "你是一个助手",
 })
 

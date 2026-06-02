@@ -60,7 +60,7 @@ http.ListenAndServe(":8080", mux)
 ### WebSocket Live 模式
 
 `RunLiveHandler` 通过 WebSocket 升级实现双向通信，支持：
-- 二进制消息：作为 `audio/pcm;rate=16000` 音频输入发送至 Gemini Live API
+- 二进制消息：作为 `audio/pcm;rate=16000` 音频输入发送至 LLM Live API
 - 文本消息：JSON 格式的 `LiveRequest`，支持 `Content`、`ActivityStart/End`、`Blob` 等输入类型
 
 ### 调试追踪
@@ -253,7 +253,7 @@ func main() {
 
 使用 `adkgo deploy cloudrun` 或手动部署到 Cloud Run：
 
-1. **设置环境变量**：`GOOGLE_API_KEY` 或 `GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATION`
+1. **设置环境变量**：`DEEPSEEK_API_KEY`、`GOOGLE_API_KEY` 等模型 API Key，或 `GOOGLE_CLOUD_PROJECT`、`GOOGLE_CLOUD_LOCATION`
 2. **启用 Vertex AI 后端**：使用 `genai.BackendVertexAI` 代替 API Key，利用 Workload Identity 自动认证
 3. **Session 存储**：生产环境建议使用 `session/vertexai` 代替内存存储，确保会话持久化
 4. **Memory 服务**：使用 `memory/vertexai` 实现跨会话记忆

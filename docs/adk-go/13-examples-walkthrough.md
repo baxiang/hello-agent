@@ -29,9 +29,9 @@ go run ./examples/quickstart/main.go help
 
 **路径**：`examples/quickstart/main.go`
 
-最简 Agent 示例。创建一个天气/时间查询 Agent，使用 `gemini-3.1-flash-lite` 模型和 `GoogleSearch` 工具，通过 `full.NewLauncher()` 支持所有运行模式。
+最简 Agent 示例。创建一个天气/时间查询 Agent，使用 DeepSeek 或 Gemini 模型，通过 `full.NewLauncher()` 支持所有运行模式。
 
-**关键 API**：`llmagent.New()`、`gemini.NewModel()`、`geminitool.GoogleSearch`、`agent.NewSingleLoader()`
+**关键 API**：`llmagent.New()`、`model.LLM` 接口、`agent.NewSingleLoader()`
 
 ## 2. tools/
 
@@ -70,7 +70,7 @@ go run ./examples/quickstart/main.go help
 
 **路径**：`examples/bidi/main.go`
 
-双向流式通信示例。使用 `gemini-3.1-flash-live-preview` 模型，通过 WebSocket 实现 Live 模式，支持实时语音交互。包含自定义 `camera_toggle` 工具演示流式场景下的工具调用。
+双向流式通信示例。通过 WebSocket 实现 Live 模式，支持实时语音交互。包含自定义 `camera_toggle` 工具演示流式场景下的工具调用。
 
 子目录：
 - **sequential/**：流式场景下的顺序执行
@@ -127,7 +127,7 @@ Agent-to-Agent 协议示例。完整演示：
 
 Vertex AI 集成示例：
 
-- **agent.go**：使用 Vertex AI 后端（而非 API Key）创建 Gemini 模型
+- **agent.go**：使用 Vertex AI 后端创建模型
 - **imagegenerator/**：使用 Imagen 模型生成图片
 - **vertexengine/**：Vertex AI Engine 部署
 

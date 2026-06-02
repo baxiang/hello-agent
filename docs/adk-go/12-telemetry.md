@@ -161,10 +161,10 @@ LLM 调用层会创建独立的 Span，记录模型名称、请求参数、Token
 ```
 invoke_agent (root_agent)
 ├─ invoke_agent (sub_agent_1)
-│  ├─ chat (gemini-2.5-flash)
+│  ├─ chat (deepseek-chat)
 │  └─ execute_tool (search_web)
 └─ invoke_agent (sub_agent_2)
-   └─ chat (gemini-2.5-flash)
+   └─ chat (deepseek-chat)
 ```
 
 ## 4. 配置示例
