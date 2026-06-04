@@ -22,7 +22,7 @@ type Agent interface {
 
 - **`Name()`**：返回 Agent 的唯一标识名。在 Agent 树中必须唯一，且不能为 `"user"`（保留给用户输入）。
 - **`Description()`**：描述 Agent 的能力。LLM 在多 Agent 场景下根据此描述决定是否将控制权委托给该 Agent，建议使用简洁的单行描述。
-- **`Run()`**：Agent 的核心执行方法，接收 `InvocationContext`，返回 `iter.Seq2[*session.Event, error]`。采用 Go 1.23+ 的迭代器模式（range over function），使得调用方可以惰性地逐事件消费，而不必等待全部结果生成完毕。这是 ADK-Go 流式处理的基础——Runner 遍历此迭代器，每产出一个事件即可立即转发或持久化。
+- **`Run()`**：Agent 的核心执行方法，接收 `InvocationContext`，返回 `iter.Seq2[*session.Event, error]`。采用 Go 1.23 引入的迭代器模式（range over function），使得调用方可以惰性地逐事件消费，而不必等待全部结果生成完毕。这是 ADK-Go 流式处理的基础——Runner 遍历此迭代器，每产出一个事件即可立即转发或持久化。
 - **`SubAgents()`**：返回子 Agent 列表，构成树形结构。
 - **`FindAgent(name)`**：在以当前 Agent 为根的子树中递归查找指定名称的 Agent。
 - **`FindSubAgent(name)`**：仅在直接子 Agent 中递归查找。

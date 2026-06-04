@@ -107,7 +107,7 @@ Runner 在 Live 模式下使用这些字段实现事件排序：转录事件优�
 | `AvgLogprobs` | 平均对数概率，低值可能指示幻觉 |
 | `SessionResumptionHandle` | 会话恢复句柄，用于断线重连 |
 
-## 4. 内置 Gemini 模型（参考）
+## 4. 内置 Gemini 模型（仅作参考）
 
 定义于 `source/model/gemini/gemini.go`，是 ADK-Go 默认内建的 LLM 实现。此处保留作为参考，本章后续以 **DeepSeek 自定义模型** 作为主要实战示例。
 

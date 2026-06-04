@@ -4,7 +4,7 @@
 
 开始使用 ADK-Go 之前，请确保你的开发环境满足以下要求：
 
-- **Go 1.23+**：ADK-Go 使用了 Go 1.23 引入的 `iter.Seq2` 迭代器协议，需要较新的 Go 版本。
+- **Go 1.25+**：`iter.Seq2` 迭代器协议自 Go 1.23 引入，但 ADK-Go v1.2.0 源码要求最低 Go 1.25（见 `go.mod`）。
 - **DeepSeek API Key**：用于访问 DeepSeek 模型。在 [DeepSeek 开放平台](https://platform.deepseek.com/) 获取。
 - **安装依赖**：
 
@@ -58,11 +58,9 @@ func NewDeepSeekModel(name, apiKey string) model.LLM {
 func (m *DeepSeekModel) Name() string { return m.name }
 
 func (m *DeepSeekModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
-    return func(yield func(*model.LLMResponse, error) bool) {
-        // TODO: 调用 DeepSeek Chat API，将 genai.Content 转换为 DeepSeek 请求格式
-        // POST https://api.deepseek.com/chat/completions
-        // 参考: https://platform.deepseek.com/api-docs
-    }
+    // 完整可运行实现见 05-model.md 第 5 节「DeepSeek 自定义模型接入（实战）」
+    // 此处省略 HTTP 调用与 Content 格式转换逻辑
+    return func(yield func(*model.LLMResponse, error) bool) {}
 }
 
 // ---------- 主程序 ----------
@@ -139,6 +137,7 @@ func NewDeepSeekModel(name, apiKey string) model.LLM {
 }
 func (m *DeepSeekModel) Name() string { return m.name }
 func (m *DeepSeekModel) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+    // 完整实现见 05-model.md
     return func(yield func(*model.LLMResponse, error) bool) {}
 }
 

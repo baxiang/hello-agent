@@ -4,7 +4,7 @@
 
 ADK-Go（Agent Development Kit for Go）是 Google 开源的语言优先（Language-First）Go AI Agent 开发工具包，当前版本 v1.2.0，采用 Apache 2.0 许可证发布。它为开发者提供了一套完整的框架，用于构建、组合和部署基于大语言模型（LLM）的智能体应用。
 
-ADK-Go 的核心目标是让 Go 开发者能够以惯用的 Go 风格来构建 AI Agent，而非简单地将 Python 版本的概念翻译过来。项目充分利用了 Go 1.23+ 引入的迭代器协议（`iter.Seq2`）、接口组合等语言特性，使得 Agent 的定义与编排既类型安全又富有表现力。
+ADK-Go 的核心目标是让 Go 开发者能够以惯用的 Go 风格来构建 AI Agent，而非简单地将 Python 版本的概念翻译过来。项目充分利用了 Go 1.23 引入的迭代器协议（`iter.Seq2`）、接口组合等语言特性，使得 Agent 的定义与编排既类型安全又富有表现力。当前版本要求 Go 1.25+。
 
 ### 什么是 AI Agent？
 
@@ -59,7 +59,7 @@ type Agent interface {
 }
 ```
 
-`Run()` 方法返回 `iter.Seq2[*session.Event, error]`，这是 Go 1.23+ 的迭代器协议，支持惰性求值和流式处理。`internal()` 是框架内部方法，用户不应直接调用。Agent 的主要实现包括：
+`Run()` 方法返回 `iter.Seq2[*session.Event, error]`，这是 Go 1.23 引入的迭代器协议，支持惰性求值和流式处理。`internal()` 是框架内部方法，用户不应直接调用。Agent 的主要实现包括：
 
 - **LLMAgent**：基于大语言模型的智能体，通过 `llmagent.New()` 创建，支持工具调用、回调钩子、指令模板等。
 - **SequentialAgent**：顺序执行子 Agent 的编排器。
@@ -139,7 +139,7 @@ ADK-Go 特别适合以下场景：
 | 特性 | ADK-Go | ADK-Python | ADK-Java |
 |------|--------|------------|----------|
 | 语言特性 | 静态类型、编译型、goroutine | 动态类型、解释型、asyncio | 静态类型、JVM、虚拟线程 |
-| 流式协议 | `iter.Seq2`（Go 1.23+） | Async Generator | Reactive Streams |
+| 流式协议 | `iter.Seq2`（Go 1.25+） | Async Generator | Reactive Streams |
 | 接口风格 | 接口组合 + 结构体嵌入 | Protocol/ABC | Interface + CompletableFuture |
 | 并发模型 | goroutine + channel | asyncio | 虚拟线程 |
 | 部署体积 | 单二进制，MB 级 | 需要 Python 运行时 | 需要 JVM |
@@ -233,7 +233,7 @@ A：目前 v1.2.0，核心功能（Agent、Tool、Runner、Session）已经稳�
 
 **Q：Go 版本和 Python 版本功能差距大吗？**
 
-A：有差距。Python 是最成熟的（v2.0 Beta，支持 Workflows、Agent Teams、Evaluation 等），Go 版本目前覆盖了核心功能但缺少一些高级特性（如 Evaluation 框架）。不过 Go 版本在快速追赶中。
+A：有差距。Python 是最成熟的（v2.0 Beta，支持 Workflows、Agent Teams、Evaluation 等），Go 版本目前覆盖了核心功能但缺少一些高级特性（如 Evaluation 框架、RouterAgent 等）。Go 版本暂无内置评估工具，可以在 Agent 外部通过 LLM-as-Judge 脚本来实现评估。不过 Go 版本在快速追赶中。
 
 **Q：ADK 和 LangChain Go (langchaingo) 有什么区别？**
 
