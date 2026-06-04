@@ -55,6 +55,7 @@
 | 04 | [genai.Content 多模态消息](./go-fundamentals/04-genai-content.md) | genai 包、Content/Part 结构、FunctionCall/Response |
 | 05 | [Context 与 State](./go-fundamentals/05-context-state.md) | InvocationContext、session.State、作用域前缀、StateDelta |
 | 06 | [错误处理](./go-fundamentals/06-error-handling.md) | iter.Seq2 错误传播、Plugin 错误回调、RetryAndReflect |
+| 07 | [泛型](./go-fundamentals/07-generics.md) | 类型参数、类型约束、functiontool.New[TArgs, TResults]、边界转换模式 |
 
 ## 学习路径建议
 
