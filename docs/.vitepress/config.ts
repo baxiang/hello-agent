@@ -30,7 +30,6 @@ export default defineConfig({
       {
         text: 'Go 框架',
         items: [
-          { text: 'Go 迭代器基础', link: '/go-iterators/' },
           { text: 'ADK-Go', link: '/adk-go/' },
           { text: 'LangChainGo', link: '/langchaingo/' },
           { text: 'Eino', link: '/eino/' },
@@ -110,12 +109,14 @@ export default defineConfig({
         {
           text: 'Go 前置知识',
           items: [
+            { text: 'Go 迭代器基础', link: '/go-iterators/' },
             { text: 'Go 迭代器从零精通', link: '/adk-go/go-fundamentals/01-iterators' },
             { text: '接口与组合', link: '/adk-go/go-fundamentals/02-interfaces-composition' },
             { text: '函数选项模式', link: '/adk-go/go-fundamentals/03-functional-options' },
             { text: 'genai 内容类型', link: '/adk-go/go-fundamentals/04-genai-content' },
             { text: 'Context 与状态', link: '/adk-go/go-fundamentals/05-context-state' },
             { text: '错误处理', link: '/adk-go/go-fundamentals/06-error-handling' },
+            { text: '泛型', link: '/adk-go/go-fundamentals/07-generics' },
           ]
         }
       ],
