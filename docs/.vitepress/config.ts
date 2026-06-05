@@ -55,6 +55,7 @@ export default defineConfig({
       {
         text: '协议',
         items: [
+          { text: 'OpenAI API 协议', link: '/openai-api/' },
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
         ]
@@ -190,6 +191,25 @@ export default defineConfig({
             { text: 'Jackson 序列化', link: '/agentscope/java/learning/09-jackson' },
             { text: '设计模式', link: '/agentscope/java/learning/10-design-patterns' },
             { text: 'LLM 核心概念', link: '/agentscope/java/learning/11-llm-concepts' },
+          ]
+        }
+      ],
+      '/openai-api/': [
+        {
+          text: '入门',
+          items: [
+            { text: '协议总览', link: '/openai-api/00-overview' },
+          ]
+        },
+        {
+          text: '核心协议',
+          items: [
+            { text: '请求与响应格式', link: '/openai-api/01-request-response' },
+            { text: '流式协议 (SSE)', link: '/openai-api/02-streaming' },
+            { text: 'Function Calling', link: '/openai-api/03-function-calling' },
+            { text: 'Token 计算与计费', link: '/openai-api/04-token' },
+            { text: '多模态输入', link: '/openai-api/05-multimodal' },
+            { text: '参数调优', link: '/openai-api/06-parameters' },
           ]
         }
       ],
