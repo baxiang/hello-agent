@@ -52,10 +52,15 @@ export default defineConfig({
         ]
       },
       {
-        text: '协议与平台',
+        text: '协议',
         items: [
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
+        ]
+      },
+      {
+        text: '平台',
+        items: [
           { text: 'Langfuse', link: '/langfuse/' },
           { text: 'Hiclaw', link: '/hiclaw/' },
         ]
