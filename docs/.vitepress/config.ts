@@ -56,6 +56,7 @@ export default defineConfig({
         items: [
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
+          { text: 'OpenAI Agents SDK', link: '/openai/' },
         ]
       },
       {
@@ -379,6 +380,27 @@ export default defineConfig({
             { text: 'Client 能力', link: '/mcp/03-client-capabilities' },
             { text: '传输与安全', link: '/mcp/04-transports-security' },
             { text: '实现指南', link: '/mcp/05-implementation-guide' },
+          ]
+        }
+      ],
+      '/openai/': [
+        {
+          text: '入门',
+          items: [
+            { text: '概览', link: '/openai/00-overview' },
+          ]
+        },
+        {
+          text: '核心概念',
+          items: [
+            { text: 'Agent 核心', link: '/openai/01-agent' },
+            { text: '工具系统', link: '/openai/02-tools' },
+            { text: 'Agent 转移 (Handoffs)', link: '/openai/03-handoffs' },
+            { text: '护栏 (Guardrails)', link: '/openai/04-guardrails' },
+            { text: '追踪 (Tracing)', link: '/openai/05-tracing' },
+            { text: '会话与记忆', link: '/openai/06-sessions-memory' },
+            { text: '实时语音 Agent', link: '/openai/07-realtime-voice' },
+            { text: '沙箱 Agent', link: '/openai/08-sandbox' },
           ]
         }
       ],
