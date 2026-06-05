@@ -49,7 +49,18 @@ export default defineConfig({
           { text: 'LangChain', link: '/langchain/' },
           { text: 'PydanticAI', link: '/pydantic-ai/' },
           { text: 'DeerFlow', link: '/deer-flow/' },
+          { text: 'Mem0', link: '/llm-memory/mem0' },
           { text: 'AgentScope Python', link: '/agentscope/' },
+        ]
+      },
+      {
+        text: 'LLM 记忆',
+        items: [
+          { text: '对比总览', link: '/llm-memory/' },
+          { text: 'Mem0 (57.7k)', link: '/llm-memory/mem0' },
+          { text: 'SuperMemory (25.6k)', link: '/llm-memory/supermemory' },
+          { text: 'Memori (15.2k)', link: '/llm-memory/memori' },
+          { text: 'memU (13.8k)', link: '/llm-memory/memu' },
         ]
       },
       {
@@ -454,6 +465,26 @@ export default defineConfig({
             { text: '工具与依赖', link: '/pydantic-ai/03-tools-deps' },
             { text: '流式与可观测性', link: '/pydantic-ai/04-streaming-observability-evals' },
             { text: 'MCP/A2A 与生产', link: '/pydantic-ai/05-mcp-a2a-production' },
+          ]
+        }
+      ],
+      '/llm-memory/': [
+        {
+          text: 'LLM 记忆层对比',
+          items: [
+            { text: '总览对比', link: '/llm-memory/' },
+            { text: 'Mem0 (57.7k)', link: '/llm-memory/mem0' },
+            { text: 'SuperMemory (25.6k)', link: '/llm-memory/supermemory' },
+            { text: 'Memori (15.2k)', link: '/llm-memory/memori' },
+            { text: 'memU (13.8k)', link: '/llm-memory/memu' },
+          ]
+        }
+      ],
+      '/mem0/': [
+        {
+          text: 'Mem0 源码学习',
+          items: [
+            { text: '源码深度学习笔记', link: '/mem0/' },
           ]
         }
       ],
