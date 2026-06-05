@@ -1,166 +1,176 @@
-# 多模态输入
+# 多模态输入与输出
 
-OpenAI API 支持文本之外的多模态输入——图片、音频、视频。本章聚焦 `v1/chat/completions` 端点中的多模态消息格式。
+OpenAI API 在 `v1/chat/completions` 中统一支持文本、图片、音频的输入和输出。
 
 ## 1. Vision：图片输入
 
 ```json
 {
   "model": "gpt-4o",
-  "messages": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "What is in this image?"},
-        {
-          "type": "image_url",
-          "image_url": {
-            "url": "https://example.com/photo.jpg",
-            "detail": "auto"
-          }
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "What is in this image?"},
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "https://example.com/photo.jpg",
+          "detail": "auto"
         }
-      ]
-    }
-  ]
+      }
+    ]
+  }]
 }
 ```
 
 ### image_url 参数
 
-| 参数 | 说明 |
-|------|------|
-| `url` | 图片 URL（`https://...`）或 base64 编码（`data:image/jpeg;base64,...`） |
-| `detail` | `"auto"`（默认）、`"low"`（512px）、`"high"`（细节模式） |
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `url` | ✅ | HTTPS URL 或 `data:image/...;base64,...` |
+| `detail` | ❌ | `auto`（默认）/ `low` / `high` |
 
-### Base64 方式
+### Base64 编码
 
 ```python
 import base64
 
-def encode_image(path: str) -> str:
-    with open(path, "rb") as f:
-        return base64.b64encode(f.read()).decode("utf-8")
+with open("photo.jpg", "rb") as f:
+    b64 = base64.b64encode(f.read()).decode()
 
-content = [
-    {"type": "text", "text": "Describe this image"},
-    {
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{encode_image('photo.jpg')}",
-            "detail": "high",
-        },
-    },
-]
+content = [{
+    "type": "image_url",
+    "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}
+}]
 ```
 
-### detail 模式对比
+### detail 模式
 
-| Detail | 处理方式 | Token 消耗 | 适用 |
-|--------|---------|-----------|------|
-| `auto` | 自动选择 | 自适应 | 通用 |
-| `low` | 缩放至 512x512 | 85 tokens | 快速分类、缩略图 |
-| `high` | 多 crop 拼接 | 详细：~170 tokens/crop | 文字识别、精细分析 |
+| Detail | 处理 | Token | 适用 |
+|--------|------|-------|------|
+| `auto` | 自动判断 | 自适应 | 通用 |
+| `low` | 压缩至 512x512 | 85 tokens | 分类、快速识别 |
+| `high` | 多 tile 拼接 | 85 + 170×tiles | 文字识别、精细分析 |
 
-## 2. 多图输入
+### Token 估算（high 模式）
 
-```json
-{
-  "content": [
-    {"type": "text", "text": "Compare these two images"},
-    {
-      "type": "image_url",
-      "image_url": {"url": "https://example.com/before.jpg"}
-    },
-    {
-      "type": "image_url",
-      "image_url": {"url": "https://example.com/after.jpg"}
-    }
-  ]
-}
+```python
+def estimate_image_tokens(w: int, h: int) -> int:
+    # 缩放至 fit 2048x2048
+    if w > 2048 or h > 2048:
+        scale = 2048 / max(w, h)
+        w, h = int(w * scale), int(h * scale)
+    # 短边缩放至 fit 768
+    if min(w, h) > 768:
+        scale = 768 / min(w, h)
+        w, h = int(w * scale), int(h * scale)
+    tiles = ((w + 511) // 512) * ((h + 511) // 512)
+    return 85 + 170 * tiles
 ```
 
-每张图独立处理，Token 消耗累加。
+### 支持的图片格式
 
-## 3. Audio 输入
+PNG、JPEG/JPG、WEBP、非动画 GIF。最大 20MB/张，最多 2048x2048 像素后缩放。
+
+### 模型支持
+
+`gpt-4o`、`gpt-4o-mini`、`gpt-4-turbo`、`o1`——所有 vision 模型。`o1` 不支持 `detail` 参数。
+
+## 2. Audio 输入
 
 ```json
 {
   "model": "gpt-4o-audio-preview",
-  "messages": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "What is being said in this audio?"},
-        {
-          "type": "input_audio",
-          "input_audio": {
-            "data": "base64-encoded-audio-data...",
-            "format": "wav"
-          }
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "What is being said?"},
+      {
+        "type": "input_audio",
+        "input_audio": {
+          "data": "base64-audio-data...",
+          "format": "wav"
         }
-      ]
-    }
-  ]
+      }
+    ]
+  }]
 }
 ```
-
-### Audio 参数
 
 | 参数 | 说明 |
 |------|------|
-| `data` | Base64 编码的音频数据 |
-| `format` | `"wav"` 或 `"mp3"` |
+| `data` | Base64 编码音频 |
+| `format` | `wav` 或 `mp3` |
 
-当前仅 `gpt-4o-audio-preview` 模型支持音频输入。
+仅 `gpt-4o-audio-preview` 支持。
 
-## 4. Video 输入
+## 3. Audio 输出
 
-视频通过抽帧方式——上传关键帧作为图片序列：
+请求输出音频时需设置 `modalities` 和 `audio` 参数：
 
 ```json
 {
-  "content": [
-    {"type": "text", "text": "Describe what happens in this video"},
-    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,frame1..."}},
-    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,frame2..."}},
-    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,frame3..."}}
-  ]
+  "model": "gpt-4o-audio-preview",
+  "modalities": ["text", "audio"],
+  "audio": {
+    "voice": "alloy",
+    "format": "wav"
+  },
+  "messages": [{"role": "user", "content": "Tell me about AI"}]
 }
 ```
 
-OpenAI 没有原生的 video 输入类型——视频处理是客户端层面的抽帧逻辑。
+### audio 参数
 
-## 5. 文件输入
+| 参数 | 说明 |
+|------|------|
+| `voice` | `alloy` / `echo` / `fable` / `onyx` / `nova` / `shimmer` |
+| `format` | `wav` / `mp3` / `flac` / `opus` / `pcm16` |
+
+响应中包含 `audio` 字段：
 
 ```json
 {
+  "message": {
+    "role": "assistant",
+    "audio": {
+      "id": "audio_abc123",
+      "data": "base64-audio-data...",
+      "expires_at": 1718323200,
+      "transcript": "AI stands for Artificial Intelligence..."
+    }
+  }
+}
+```
+
+`audio.data` 是 base64 编码的音频——客户端需解码后播放。
+
+## 4. 文件输入
+
+```json
+{
+  "role": "user",
   "content": [
     {"type": "text", "text": "Summarize this document"},
-    {
-      "type": "file",
-      "file": {
-        "file_id": "file-abc123",
-        "filename": "report.pdf"
-      }
-    }
+    {"type": "file", "file": {"file_id": "file-abc123"}}
   ]
 }
 ```
 
-需要先通过 `v1/files` 端点上传文件获取 `file_id`。
+### 上传文件
 
-## 6. 输出多模态
-
-### 结构化输出 + 文本
-
-```python
-# 输出类型为普通文本（默认）
-# 模型返回纯文本
+```bash
+curl https://api.openai.com/v1/files \
+  -H "Authorization: Bearer $KEY" \
+  -F "purpose=assistants" \
+  -F "file=@report.pdf"
 ```
 
-### 图像生成（独立端点）
+响应返回 `file_id`。支持 PDF、DOCX、PPTX、TXT、MD、代码文件。
 
-图像生成不走 `v1/chat/completions`，而是 `v1/images/generations`（DALL-E）：
+## 5. Image Generation（独立端点）
+
+图像生成不走 `v1/chat/completions`，而是 `POST v1/images/generations`（DALL-E）：
 
 ```bash
 curl https://api.openai.com/v1/images/generations \
@@ -168,56 +178,85 @@ curl https://api.openai.com/v1/images/generations \
   -H "Content-Type: application/json" \
   -d '{
     "model": "dall-e-3",
-    "prompt": "A cat sitting on a cloud",
+    "prompt": "A cat on a cloud",
     "n": 1,
-    "size": "1024x1024"
+    "size": "1024x1024",
+    "quality": "standard"
   }'
 ```
 
-## 7. 在 ADK-Go 中的对应
+## 6. Vision + Function Calling 组合
 
-```go
-// genai 包定义了统一的多模态 Part 类型
-type Part struct {
-    Text       string
-    InlineData *Blob  // 对应 base64 编码的图片/音频
-    // ...
+```json
+{
+  "model": "gpt-4o",
+  "messages": [{
+    "role": "user",
+    "content": [
+      {"type": "text", "text": "Extract the text from this receipt"},
+      {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
+    ]
+  }],
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "create_expense",
+      "description": "Create an expense record",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "amount": {"type": "number"},
+          "vendor": {"type": "string"},
+          "date": {"type": "string"}
+        },
+        "required": ["amount", "vendor"]
+      }
+    }
+  }],
+  "tool_choice": "required"
 }
-
-// 将 genai.Part 转为 OpenAI API 格式时：
-// Text → {"type": "text", "text": ...}
-// InlineData → {"type": "image_url", "image_url": {"url": "data:...;base64,..."}}
 ```
+
+模型先分析图片提取文字，然后调用 `create_expense` 结构化输出。
+
+## 7. Modalities 参数（输出控制）
+
+```json
+{
+  "modalities": ["text"]           // 仅文本（默认）
+  "modalities": ["text", "audio"]  // 文本 + 音频
+}
+```
+
+仅 `gpt-4o-audio-preview` 支持 `audio`。其他模型忽略此参数。
 
 ## 8. 多模态成本
 
-图片按 detail 模式计费：
+### 图片
 
-| Detail | Token 折算 |
-|--------|-----------|
-| `low` | 85 tokens/张 |
-| `high` | 每 512px tile 约 170 tokens |
+| Detail | 每张 Token | 每张成本 (gpt-4o) |
+|--------|-----------|-------------------|
+| `low` | 85 | $0.00021 |
+| `high` (1 tile) | 255 | $0.00064 |
+| `high` (4 tiles) | 765 | $0.0019 |
+| `high` (9 tiles) | 1615 | $0.0040 |
 
-```python
-def estimate_image_tokens(width: int, height: int, detail: str) -> int:
-    if detail == "low":
-        return 85
-    # high 模式
-    if width > 2048 or height > 2048:
-        scale = 2048 / max(width, height)
-        width, height = int(width * scale), int(height * scale)
-    if min(width, height) > 768:
-        scale = 768 / min(width, height)
-        width, height = int(width * scale), int(height * scale)
-    tiles_w = (width + 511) // 512
-    tiles_h = (height + 511) // 512
-    return 85 + 170 * tiles_w * tiles_h
-```
+### 音频
 
-## 9. 支持的图片格式
+| 模型 | 输入 | 输出 |
+|------|------|------|
+| gpt-4o-audio-preview | $40/MTok | $80/MTok |
 
-- PNG
-- JPEG / JPG
-- WEBP
-- 非动画 GIF
-- 最大 20MB/张
+音频按音频 token 计费，约为文本 token 的 16 倍。
+
+## 9. 支持的模型速查
+
+| 模型 | 文本 | 图片输入 | 音频输入 | 音频输出 |
+|------|------|---------|---------|---------|
+| gpt-4o | ✅ | ✅ | ❌ | ❌ |
+| gpt-4o-mini | ✅ | ✅ | ❌ | ❌ |
+| gpt-4-turbo | ✅ | ✅ | ❌ | ❌ |
+| gpt-4o-audio-preview | ✅ | ❌ | ✅ | ✅ |
+| o1 / o3-mini | ✅ | ✅ | ❌ | ❌ |
+| o4-mini | ✅ | ✅ | ❌ | ❌ |
+| gpt-4.1 | ✅ | ✅ | ❌ | ❌ |

@@ -205,12 +205,12 @@ export default defineConfig({
         {
           text: '核心协议',
           items: [
-            { text: '请求与响应格式', link: '/openai-api/01-request-response' },
-            { text: '流式协议 (SSE)', link: '/openai-api/02-streaming' },
-            { text: 'Function Calling', link: '/openai-api/03-function-calling' },
-            { text: 'Token 计算与计费', link: '/openai-api/04-token' },
-            { text: '多模态输入', link: '/openai-api/05-multimodal' },
-            { text: '参数调优', link: '/openai-api/06-parameters' },
+            { text: 'Messages 消息系统', link: '/openai-api/01-messages' },
+            { text: '响应格式', link: '/openai-api/02-response' },
+            { text: '流式协议 (SSE)', link: '/openai-api/03-streaming' },
+            { text: 'Function Calling', link: '/openai-api/04-function-calling' },
+            { text: '多模态输入与输出', link: '/openai-api/05-multimodal' },
+            { text: '参数全解', link: '/openai-api/06-parameters' },
           ]
         }
       ],
