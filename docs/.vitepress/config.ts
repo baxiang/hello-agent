@@ -56,6 +56,7 @@ export default defineConfig({
         text: '协议',
         items: [
           { text: 'OpenAI API 协议', link: '/openai-api/' },
+          { text: 'Anthropic API 协议', link: '/anthropic-api/' },
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
         ]
@@ -374,6 +375,25 @@ export default defineConfig({
           items: [
             { text: '架构总览', link: '/hiclaw/architecture/README' },
             { text: '完整架构分析', link: '/hiclaw/architecture/full-review' },
+          ]
+        }
+      ],
+      '/anthropic-api/': [
+        {
+          text: '入门',
+          items: [
+            { text: '协议总览', link: '/anthropic-api/00-overview' },
+          ]
+        },
+        {
+          text: '核心协议',
+          items: [
+            { text: 'Messages API 格式', link: '/anthropic-api/01-messages' },
+            { text: '流式协议 (SSE)', link: '/anthropic-api/02-streaming' },
+            { text: 'Tool Use 机制', link: '/anthropic-api/03-tool-use' },
+            { text: '内容块 (Content Blocks)', link: '/anthropic-api/04-content-blocks' },
+            { text: '扩展思考', link: '/anthropic-api/05-extended-thinking' },
+            { text: '参数调优', link: '/anthropic-api/06-parameters' },
           ]
         }
       ],
