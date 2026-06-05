@@ -45,6 +45,7 @@ export default defineConfig({
         text: 'Python 框架',
         items: [
           { text: 'ADK-Python', link: '/adk-python/' },
+          { text: 'OpenAI Agents SDK', link: '/openai/' },
           { text: 'LangChain', link: '/langchain/' },
           { text: 'PydanticAI', link: '/pydantic-ai/' },
           { text: 'DeerFlow', link: '/deer-flow/' },
@@ -56,7 +57,6 @@ export default defineConfig({
         items: [
           { text: 'A2A 协议', link: '/a2a/' },
           { text: 'MCP 协议', link: '/mcp/' },
-          { text: 'OpenAI Agents SDK', link: '/openai/' },
         ]
       },
       {
