@@ -44,6 +44,7 @@ export default defineConfig({
       {
         text: 'Python 框架',
         items: [
+          { text: 'ADK-Python', link: '/adk-python/' },
           { text: 'LangChain', link: '/langchain/' },
           { text: 'PydanticAI', link: '/pydantic-ai/' },
           { text: 'DeerFlow', link: '/deer-flow/' },
@@ -62,6 +63,23 @@ export default defineConfig({
     ],
     
     sidebar: {
+      '/adk-python/': [
+        {
+          text: '入门',
+          items: [
+            { text: '概览', link: '/adk-python/00-overview' },
+          ]
+        },
+        {
+          text: 'Python 前置知识',
+          items: [
+            { text: 'asyncio 异步编程', link: '/adk-python/python-fundamentals/01-asyncio' },
+            { text: 'Pydantic v2', link: '/adk-python/python-fundamentals/02-pydantic' },
+            { text: '类型提示', link: '/adk-python/python-fundamentals/03-type-hints' },
+            { text: '装饰器与数据类', link: '/adk-python/python-fundamentals/04-decorators-dataclasses' },
+          ]
+        }
+      ],
       '/deer-flow/': [
         {
           text: 'DeerFlow 学习笔记',
