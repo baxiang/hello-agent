@@ -428,7 +428,7 @@ export default withMermaid({
       ],
       '/mcp/': [
         {
-          text: 'MCP 协议',
+          text: '协议规范',
           items: [
             { text: '从零理解 MCP', link: '/mcp/00-mcp-from-zero' },
             { text: '协议架构', link: '/mcp/01-protocol-architecture' },
@@ -436,6 +436,15 @@ export default withMermaid({
             { text: 'Client 能力', link: '/mcp/03-client-capabilities' },
             { text: '传输与安全', link: '/mcp/04-transports-security' },
             { text: '实现指南', link: '/mcp/05-implementation-guide' },
+          ]
+        },
+        {
+          text: '实践模块',
+          items: [
+            { text: 'Python Server 实战', link: '/mcp/10-mcp-server-python' },
+            { text: 'Go Server 实战', link: '/mcp/11-mcp-server-go' },
+            { text: 'Client 多平台接入', link: '/mcp/12-mcp-client-integration' },
+            { text: '进阶架构与部署', link: '/mcp/13-mcp-advanced' },
           ]
         }
       ],
