@@ -1,7 +1,6 @@
-import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default withMermaid(defineConfig({
+export default withMermaid({
   title: 'Hello Agent',
   description: 'Agent 框架技术学习文档',
   
@@ -634,5 +633,5 @@ export default withMermaid(defineConfig({
     lightModeSwitchTitle: '切换到浅色模式',
     darkModeSwitchTitle: '切换到深色模式',
   }
-}))
+})
 // which is outside docs/. We need to tell VitePress to preserve symlinks.
