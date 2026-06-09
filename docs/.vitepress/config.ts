@@ -484,13 +484,25 @@ export default withMermaid({
       ],
       '/llm-memory/': [
         {
-          text: 'LLM 记忆层对比',
+          text: '对比总览',
           items: [
-            { text: '总览对比', link: '/llm-memory/' },
+            { text: '四大项目深度对比', link: '/llm-memory/' },
+            { text: '架构深度对比', link: '/llm-memory/08-architecture-comparison' },
+          ]
+        },
+        {
+          text: '项目深度解析',
+          items: [
             { text: 'Mem0 (57.7k)', link: '/llm-memory/mem0' },
             { text: 'SuperMemory (25.6k)', link: '/llm-memory/supermemory' },
             { text: 'Memori (15.2k)', link: '/llm-memory/memori' },
             { text: 'memU (13.8k)', link: '/llm-memory/memu' },
+          ]
+        },
+        {
+          text: '实践指南',
+          items: [
+            { text: '集成实战', link: '/llm-memory/07-integration' },
           ]
         }
       ],
