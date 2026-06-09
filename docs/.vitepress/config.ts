@@ -33,6 +33,7 @@ export default defineConfig({
           { text: 'ADK-Go', link: '/adk-go/' },
           { text: 'LangChainGo', link: '/langchaingo/' },
           { text: 'Eino', link: '/eino/' },
+          { text: 'tRPC-Agent-Go', link: '/trpc-agent-go/' },
         ]
       },
       {
@@ -485,6 +486,14 @@ export default defineConfig({
           text: 'Mem0 源码学习',
           items: [
             { text: '源码深度学习笔记', link: '/mem0/' },
+          ]
+        }
+      ],
+      '/trpc-agent-go/': [
+        {
+          text: 'tRPC-Agent-Go',
+          items: [
+            { text: '技术调研报告', link: '/trpc-agent-go/' },
           ]
         }
       ],

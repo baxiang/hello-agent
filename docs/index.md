@@ -18,6 +18,10 @@ features:
     title: Go 迭代器
     details: Go 1.23 iter.Seq2 从零到精通，闭包→组合→ADK 源码实战
     link: /go-iterators/
+  - icon: 🔧
+    title: tRPC-Agent-Go
+    details: 腾讯 tRPC 团队开源 Go Agent 框架，多 Agent/GraphAgent/MCP/A2A
+    link: /trpc-agent-go/
   - icon: 🐹
     title: ADK-Go
     details: Google 开源 Go Agent 开发套件，迭代器+Channel 驱动
