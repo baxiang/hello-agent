@@ -524,6 +524,14 @@ export default withMermaid({
             { text: '可观测性', link: '/trpc-agent-go/13-observability' },
             { text: '生态与进阶', link: '/trpc-agent-go/14-ecosystem' },
           ]
+        },
+        {
+          text: '协议深度',
+          items: [
+            { text: 'MCP 协议', link: '/trpc-agent-go/15-mcp' },
+            { text: 'AG-UI 协议', link: '/trpc-agent-go/16-agui' },
+            { text: 'A2A 协议', link: '/trpc-agent-go/17-a2a' },
+          ]
         }
       ],
       '/go-iterators/': [
