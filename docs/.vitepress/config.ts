@@ -491,9 +491,27 @@ export default withMermaid({
       ],
       '/trpc-agent-go/': [
         {
-          text: 'tRPC-Agent-Go',
+          text: '概览',
           items: [
-            { text: '技术调研报告', link: '/trpc-agent-go/' },
+            { text: '项目概述', link: '/trpc-agent-go/' },
+          ]
+        },
+        {
+          text: '核心组件',
+          items: [
+            { text: 'Agent 系统', link: '/trpc-agent-go/01-agent' },
+            { text: 'Runner 执行器', link: '/trpc-agent-go/02-runner' },
+            { text: 'Model 模型层', link: '/trpc-agent-go/03-model' },
+            { text: 'Tool 工具系统', link: '/trpc-agent-go/04-tool' },
+            { text: 'Session 与 Memory', link: '/trpc-agent-go/05-session-memory' },
+            { text: 'Knowledge RAG', link: '/trpc-agent-go/06-knowledge' },
+            { text: 'Graph Agent', link: '/trpc-agent-go/07-graph' },
+          ]
+        },
+        {
+          text: '进阶主题',
+          items: [
+            { text: 'Server 与可观测性', link: '/trpc-agent-go/08-server-observability' },
           ]
         }
       ],
