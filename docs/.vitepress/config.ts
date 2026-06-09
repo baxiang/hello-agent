@@ -209,20 +209,24 @@ export default withMermaid({
       ],
       '/openai-api/': [
         {
-          text: '入门',
+          text: '协议规范',
           items: [
             { text: '协议总览', link: '/openai-api/00-overview' },
-          ]
-        },
-        {
-          text: '核心协议',
-          items: [
             { text: 'Messages 消息系统', link: '/openai-api/01-messages' },
             { text: '响应格式', link: '/openai-api/02-response' },
             { text: '流式协议 (SSE)', link: '/openai-api/03-streaming' },
             { text: 'Function Calling', link: '/openai-api/04-function-calling' },
             { text: '多模态输入与输出', link: '/openai-api/05-multimodal' },
             { text: '参数全解', link: '/openai-api/06-parameters' },
+          ]
+        },
+        {
+          text: '国产模型实战',
+          items: [
+            { text: 'DeepSeek V3/V4', link: '/openai-api/07-deepseek' },
+            { text: 'Kimi 月之暗面', link: '/openai-api/08-kimi' },
+            { text: '通义千问 Qwen', link: '/openai-api/09-qwen' },
+            { text: '对比总结与选型', link: '/openai-api/10-practice-summary' },
           ]
         }
       ],
