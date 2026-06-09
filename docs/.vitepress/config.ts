@@ -493,25 +493,36 @@ export default withMermaid({
         {
           text: '概览',
           items: [
-            { text: '项目概述', link: '/trpc-agent-go/' },
+            { text: '深度学习笔记', link: '/trpc-agent-go/' },
           ]
         },
         {
           text: '核心组件',
           items: [
             { text: 'Agent 系统', link: '/trpc-agent-go/01-agent' },
-            { text: 'Runner 执行器', link: '/trpc-agent-go/02-runner' },
-            { text: 'Model 模型层', link: '/trpc-agent-go/03-model' },
-            { text: 'Tool 工具系统', link: '/trpc-agent-go/04-tool' },
-            { text: 'Session 与 Memory', link: '/trpc-agent-go/05-session-memory' },
-            { text: 'Knowledge RAG', link: '/trpc-agent-go/06-knowledge' },
-            { text: 'Graph Agent', link: '/trpc-agent-go/07-graph' },
+            { text: 'Multi-Agent 编排', link: '/trpc-agent-go/02-agent-types' },
+            { text: 'Runner 执行器', link: '/trpc-agent-go/03-runner' },
+            { text: 'Model 模型层', link: '/trpc-agent-go/04-model' },
+            { text: 'Tool 工具系统', link: '/trpc-agent-go/05-tool' },
+            { text: '工具进阶', link: '/trpc-agent-go/06-tool-advanced' },
+            { text: 'Session 会话', link: '/trpc-agent-go/07-session' },
+            { text: 'Memory 记忆', link: '/trpc-agent-go/08-memory' },
+            { text: 'Knowledge RAG', link: '/trpc-agent-go/09-knowledge' },
           ]
         },
         {
-          text: '进阶主题',
+          text: '图工作流',
           items: [
-            { text: 'Server 与可观测性', link: '/trpc-agent-go/08-server-observability' },
+            { text: 'Graph Agent（上）', link: '/trpc-agent-go/10-graph' },
+            { text: 'Graph Agent（下）', link: '/trpc-agent-go/11-graph-advanced' },
+          ]
+        },
+        {
+          text: '部署与生态',
+          items: [
+            { text: 'Server 与协议', link: '/trpc-agent-go/12-server' },
+            { text: '可观测性', link: '/trpc-agent-go/13-observability' },
+            { text: '生态与进阶', link: '/trpc-agent-go/14-ecosystem' },
           ]
         }
       ],

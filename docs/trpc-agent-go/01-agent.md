@@ -1,357 +1,439 @@
-# Agent 系统详解
+# Agent 系统 — 源码·实战·原理
 
-Agent 是 tRPC-Agent-Go 框架的核心执行单元，负责处理用户输入并生成响应。每个 Agent 实现统一的 `agent.Agent` 接口，支持流式输出和回调机制。
+Agent 是 tRPC-Agent-Go 的核心执行单元。本文从 LLMAgent 源码走读开始，深入执行循环、Invocation 上下文、回调机制，最后以自定义 Agent 实战收尾。
 
-## 1. Agent 接口
+## 1. 概念概述
+
+### 1.1 Agent 接口定义
 
 ```go
+// agent/agent.go
 type Agent interface {
     Run(ctx context.Context, invocation *Invocation) (<-chan *event.Event, error)
     Info() Info
     SubAgents() []Agent
     FindSubAgent(name string) Agent
 }
-```
 
-- **Run**：核心执行方法，接收 Invocation 上下文，返回事件流 channel
-- **Info**：返回 Agent 基本信息（名称、描述）
-- **SubAgents**：可委托的子 Agent 列表
-- **FindSubAgent**：按名称查找子 Agent
-
-## 2. Agent 类型全景
-
-| Agent 类型 | 包路径 | 用途 | 典型场景 |
-|-----------|--------|------|----------|
-| **LLMAgent** | `agent/llmagent` | 基于 LLM 的智能代理 | 对话、推理、工具调用 |
-| **ChainAgent** | `agent/chainagent` | 顺序执行子 Agent | 流水线式多步任务 |
-| **ParallelAgent** | `agent/parallelagent` | 并发执行子 Agent | 多路独立分析后汇总 |
-| **CycleAgent** | `agent/cycleagent` | 循环迭代直到终止条件 | 自优化、多轮协商 |
-| **GraphAgent** | `agent/graphagent` | 图工作流编排 | 复杂条件分支、HITL |
-| **A2AAgent** | `agent/a2aagent` | 与远程 A2A Agent 通信 | 跨框架互操作 |
-| **ClaudeCodeAgent** | `agent/claudecode` | 调用本地 Claude Code CLI | 代码编写、文件操作 |
-| **CodexAgent** | `agent/codex` | 调用本地 Codex CLI | 代码编写与执行 |
-| **DifyAgent** | `agent/dify` | Dify 平台集成 | 低代码 Agent 构建 |
-
-## 3. LLMAgent 详解
-
-LLMAgent 是最核心的 Agent 类型，封装了 LLM 推理、工具调用、消息过滤等完整能力。
-
-### 3.1 创建 LLMAgent
-
-```go
-import "trpc.group/trpc-go/trpc-agent-go/agent/llmagent"
-
-agent := llmagent.New("assistant",
-    // 基础配置
-    llmagent.WithModel(modelInstance),          // 模型实例
-    llmagent.WithDescription("A helpful assistant"), // Agent 描述
-    llmagent.WithInstruction("You are a helpful AI assistant."), // 系统指令
-
-    // 工具配置
-    llmagent.WithTools([]tool.Tool{calculatorTool, searchTool}),
-    llmagent.WithToolSets([]tool.ToolSet{mcpToolSet}),
-
-    // 生成配置
-    llmagent.WithGenerationConfig(model.GenerationConfig{
-        Stream:      true,
-        Temperature: floatPtr(0.7),
-        MaxTokens:   intPtr(2000),
-    }),
-
-    // 子 Agent（可被委托）
-    llmagent.WithSubAgents([]agent.Agent{weatherAgent, mathAgent}),
-
-    // 安全限制
-    llmagent.WithMaxLLMCalls(10),
-    llmagent.WithMaxToolIterations(5),
-
-    // 会话摘要
-    llmagent.WithAddSessionSummary(true),
-)
-```
-
-### 3.2 完整配置选项
-
-| 配置方法 | 类型 | 说明 |
-|----------|------|------|
-| `WithModel(m)` | Model | 设置 LLM 模型实例 |
-| `WithDescription(d)` | string | Agent 功能描述 |
-| `WithInstruction(i)` | string | 系统指令（支持 `{key}` 占位变量） |
-| `WithTools(tools)` | []Tool | 工具列表 |
-| `WithToolSets(sets)` | []ToolSet | 工具集列表 |
-| `WithGenerationConfig(c)` | GenerationConfig | 生成参数 |
-| `WithSubAgents(a)` | []Agent | 子 Agent 列表 |
-| `WithMaxLLMCalls(n)` | int | 最大 LLM 调用次数 |
-| `WithMaxToolIterations(n)` | int | 最大工具迭代次数 |
-| `WithMessageTimelineFilterMode(m)` | int | 时间维消息过滤 |
-| `WithMessageBranchFilterMode(m)` | int | 分支维消息过滤 |
-| `WithReasoningContentMode(m)` | int | 推理内容处理模式 |
-| `WithStructuredOutputJSON(v)` | any | 结构化 JSON 输出 |
-| `WithStructuredOutputJSONSchema(s)` | map | 自定义 JSON Schema 输出 |
-| `WithOutputSchema(s)` | map | 旧版输出 Schema |
-| `WithOutputKey(k)` | string | 提取输出到 Session State |
-| `WithAddSessionSummary(b)` | bool | 启用会话摘要 |
-| `WithEnableContextCompaction(b)` | bool | 启用上下文压缩 |
-| `WithCodeExecutor(e)` | CodeExecutor | 代码执行器（用于 Skills） |
-| `WithEnableCodeExecutionResponseProcessor(b)` | bool | 是否自动执行代码块 |
-| `WithToolCallRetryPolicy(p)` | RetryPolicy | 工具调用重试策略 |
-| `WithAgentCallbacks(c)` | Callbacks | Agent 级回调 |
-| `WithDefaultTransferMessage(m)` | string | 默认委托消息 |
-| `WithEnablePostToolPrompt(b)` | bool | 工具调用后提示注入 |
-| `WithPostToolPrompt(p)` | string | 自定义工具调用后提示 |
-| `WithAwaitUserReplyTool(b)` | bool | 启用 await_user_reply 工具 |
-
-### 3.3 消息可见性控制
-
-LLMAgent 支持两种维度的消息过滤，决定哪些历史消息会被传入模型。
-
-**时间维度 (TimelineFilterMode)**
-
-| 模式 | 常量 | 说明 |
-|------|------|------|
-| 全部 | `TimelineFilterAll` | 历史消息 + 当前请求消息（默认） |
-| 当前请求 | `TimelineFilterCurrentRequest` | 仅当前 `runner.Run` 的消息 |
-| 当前调用 | `TimelineFilterCurrentInvocation` | 仅当前 Invocation 上下文 |
-
-**分支维度 (BranchFilterMode)**
-
-| 模式 | 常量 | 说明 |
-|------|------|------|
-| 全部 | `BranchFilterModeAll` | 所有 Agent 的消息 |
-| 前缀匹配 | `BranchFilterModePrefix` | 祖先/自身/后代（默认） |
-| 子树 | `BranchFilterModeSubtree` | 仅自身和后代 |
-| 精确匹配 | `BranchFilterModeExact` | Event.FilterKey == Invocation.eventFilterKey |
-
-**快捷模式**：`WithMessageFilterMode` 提供四种预组合模式：
-
-| 模式 | 时间 | 分支 | 场景 |
-|------|------|------|------|
-| `FullContext` | All | Prefix | 完整上下文 |
-| `RequestContext` | CurrentRequest | Prefix | 当前请求范围 |
-| `IsolatedRequest` | CurrentRequest | Exact | 完全隔离当前请求 |
-| `IsolatedInvocation` | CurrentInvocation | Exact | 完全隔离当前调用 |
-
-### 3.4 结构化输出
-
-| 方法 | 说明 | 推荐度 |
-|------|------|--------|
-| `WithStructuredOutputJSON(v, strict, desc)` | 从 Go 类型自动生成 Schema | 推荐 |
-| `WithStructuredOutputJSONSchema(name, schema, strict, desc)` | 自定义 JSON Schema | 灵活 |
-| `WithOutputSchema(schema)` | 旧版方式 | 不推荐 |
-| `WithOutputKey(key)` | 提取特定字段到 Session State | 辅助 |
-
-**示例**：
-
-```go
-type WeatherResult struct {
-    City        string  `json:"city"`
-    Temperature float64 `json:"temperature"`
-    Condition   string  `json:"condition"`
+type Info struct {
+    Name        string
+    Description string
 }
-
-agent := llmagent.New("weather-bot",
-    llmagent.WithModel(modelInstance),
-    llmagent.WithStructuredOutputJSON(
-        new(WeatherResult),
-        true,
-        "Return weather information as JSON.",
-    ),
-)
 ```
 
-### 3.5 Placeholder 变量注入
+**接口设计原则**：
+- `Run` 返回 `<-chan *event.Event` 而非直接返回结果——适配流式生成、工具调用多次往返
+- `SubAgents()` + `FindSubAgent()` 编织出 Agent 嵌套树，支持递归委托
+- 接口极简，所有扩展通过 `Invocation.RunOptions` 和 callback 注入
 
-LLMAgent 支持在 `Instruction` 和 `SystemPrompt` 中使用占位变量，运行时自动替换为 Session State 中的值：
-
-```
-{key}              → 替换为 session state 中 key 的值
-{key?}             → 可选；缺失时替换为空字符串
-{user:subkey}      → 用户级别状态
-{app:subkey}       → 应用级别状态
-{temp:subkey}      → 临时状态
-{invocation:subkey} → Invocation 级别的状态
-```
+### 1.2 Invocation 上下文
 
 ```go
-agent := llmagent.New("research-agent",
-    llmagent.WithModel(modelInstance),
-    llmagent.WithInstruction(
-        "You are a research assistant. Focus: {research_topics}. " +
-        "User interests: {user:topics?}. App banner: {app:banner?}.",
-    ),
-)
-```
-
-### 3.6 Reasoning Content Mode（DeepSeek 思考模式）
-
-控制在多轮对话中如何处理 `reasoning_content`（思维链内容）：
-
-| 模式 | 常量 | 行为 |
-|------|------|------|
-| 丢弃前轮 | `ReasoningContentModeDiscardPreviousTurns` | 仅当前请求保留，历史清除（推荐） |
-| 保留全部 | `ReasoningContentModeKeepAll` | 全部保留（调试用） |
-| 全部丢弃 | `ReasoningContentModeDiscardAll` | 节省带宽 |
-
-### 3.7 回调系统
-
-Agent 支持三个级别的回调：
-
-```go
-// Agent 级回调（创建时）
-agent := llmagent.New("assistant",
-    llmagent.WithAgentCallbacks(agent.NewCallbacks().
-        RegisterBeforeAgent(func(ctx context.Context, args *agent.BeforeAgentArgs) (*agent.BeforeAgentResult, error) {
-            // Agent 开始执行前
-            return nil, nil
-        }).
-        RegisterAfterAgent(func(ctx context.Context, args *agent.AfterAgentArgs) (*agent.AfterAgentResult, error) {
-            // Agent 执行完成后
-            return nil, nil
-        }),
-    ),
-)
-
-// 请求级回调（通过 RunOptions）
-events, _ := r.Run(ctx, userID, sessionID, msg,
-    agent.WithAgentCallbacks(myCallbacks),
-)
-```
-
----
-
-## 4. Multi-Agent 编排
-
-### 4.1 ChainAgent — 顺序执行
-
-```go
-pipeline := chainagent.New("pipeline",
-    chainagent.WithSubAgents([]agent.Agent{
-        analyzer,
-        processor,
-        reporter,
-    }),
-)
-```
-
-每个子 Agent 的输出作为下一个的输入，适合"分析→处理→报告"类流水线任务。
-
-### 4.2 ParallelAgent — 并发执行
-
-```go
-parallel := parallelagent.New("multi-expert",
-    parallelagent.WithSubAgents([]agent.Agent{
-        legalExpert,
-        technicalExpert,
-        businessExpert,
-    }),
-)
-```
-
-多个 Agent 并发处理同一输入，结果合并后返回。
-
-### 4.3 CycleAgent — 循环迭代
-
-```go
-cycler := cycleagent.New("optimizer",
-    cycleagent.WithSubAgents([]agent.Agent{planner, executor}),
-    cycleagent.WithMaxIterations(5),
-)
-```
-
-循环执行直到满足终止条件，适合需要多轮优化的场景。
-
-### 4.4 AgentTool — 将 Agent 包装为工具
-
-```go
-agentTool := agenttool.New(weatherAgent,
-    agenttool.WithSkipSummarization(true),
-    agenttool.WithStreamInner(true),
-)
-
-coordinator := llmagent.New("coordinator",
-    llmagent.WithModel(modelInstance),
-    llmagent.WithTools([]tool.Tool{agentTool}),
-)
-```
-
-支持流式转发和多种响应模式，详见 [Tool 系统文档](./04-tool)。
-
-### 4.5 Runtime Instruction 覆盖
-
-支持通过 `agent.WithInstruction(...)` 在 `Run()` 时动态覆盖 Agent 指令：
-
-```go
-events, _ := r.Run(ctx, userID, sessionID, msg,
-    agent.WithInstruction("You are now a French translator."),
-)
-```
-
-也支持 `WithModelName(name)` 动态切换模型。
-
----
-
-## 5. Invocation 上下文
-
-`Invocation` 是 Agent 执行的完整上下文对象，包含 Session、Message、RunOptions 等：
-
-```go
+// agent/invocation.go
 type Invocation struct {
     Agent            Agent
     AgentName        string
-    InvocationID     string
-    Branch           string
+    InvocationID     string         // UUID，每次 Run 唯一
+    Branch           string         // 分支标识，用于消息过滤
+    EndInvocation    bool           // 标记结束
     Session          *session.Session
     Model            model.Model
-    Message          model.Message
+    Message          model.Message  // 当前轮用户消息
     RunOptions       RunOptions
     TransferInfo     *TransferInfo
+
+    // 注入的服务
     MemoryService    memory.Service
     ArtifactService  artifact.Service
-    StructuredOutput *model.StructuredOutput
-    MaxLLMCalls      int
+
+    // 结构化输出
+    StructuredOutput     *model.StructuredOutput
+    StructuredOutputType reflect.Type
+
+    // 安全限制
+    MaxLLMCalls       int
     MaxToolIterations int
-    // ...
+
+    // 内部计数
+    llmCallCount       int
+    toolIterationCount int
+
+    // 事件过滤
+    eventFilterKey string
+    parent         *Invocation // 父 Invocation（子 Agent 场景）
+
+    // Invocation 级别的键值存储（线程安全）
+    state   map[string]any
+    stateMu sync.RWMutex
 }
 ```
 
-### Invocation State
+**设计要点**：
+- `InvocationID` 是每个 Run 的唯一标识，贯穿所有 Event
+- `parent` 指针构建调用树——UI 层可据此渲染嵌套 Agent
+- `eventFilterKey` 是实现消息隔离的核心：通过前缀匹配决定哪些历史 Event 对当前 Agent 可见
+- `state` 提供回调、中间件间的数据共享通道，惰性初始化+RWMutex 保护
 
-`Invocation` 提供线程安全的键值存储，用于在回调、中间件间共享数据：
+### 1.3 Invocation State
 
 ```go
+// 线程安全的键值存储
 inv.SetState("key", value)
 value, ok := inv.GetState("key")
 inv.DeleteState("key")
+
+// 从 Context 获取当前 Invocation
+inv, ok := agent.InvocationFromContext(ctx)
 ```
 
-### 从 Context 获取 Invocation
+**典型用法**：在 BeforeAgent 回调中设置业务参数，AfterTool 回调中读取处理结果。
+
+---
+
+## 2. 源码走读：LLMAgent 执行循环
+
+### 2.1 LLMAgent 结构
 
 ```go
-inv, ok := agent.InvocationFromContext(ctx)
+// agent/llmagent/llm_agent.go
+type LLMAgent struct {
+    name             string
+    description      string
+    instruction      string
+    model            model.Model
+    tools            []tool.Tool
+    toolSets         []tool.ToolSet
+    subAgents        []agent.Agent
+    genConfig        model.GenerationConfig
+    callbacks        *agent.Callbacks
+    maxLLMCalls      int
+    maxToolIterations int
+    // ...更多配置
+}
+```
+
+### 2.2 Run() 入口
+
+```go
+func (a *LLMAgent) Run(ctx context.Context, inv *agent.Invocation) (<-chan *event.Event, error) {
+    // 1. 初始化内部 flow
+    flow := a.createFlow(inv)
+
+    // 2. 启动 goroutine 执行核心循环
+    eventCh := make(chan *event.Event, 256) // 缓冲 channel，防止阻塞
+    go func() {
+        defer close(eventCh)
+        flow.Execute(ctx, inv, eventCh)
+    }()
+
+    return eventCh, nil
+}
+```
+
+**为什么用 goroutine + channel 而非直接返回结果？**
+- LLM 流式响应需要逐 chunk 推送
+- 工具调用需要多次 LLM 往返（think → tool call → tool result → think → ...）
+- 256 缓冲 channel 在大部分场景下足够，高并发时 goroutine 不会因 channel 写入阻塞
+
+### 2.3 核心执行循环
+
+```go
+// internal/flow/llmflow/llm_flow.go（简化版）
+func (f *LLMFlow) Execute(ctx context.Context, inv *agent.Invocation, eventCh chan<- *event.Event) {
+    for {
+        // ═══ 前置处理 ═══
+        // 1. 构建 messages（系统指令 + 历史消息 + 当前消息）
+        messages := f.buildMessages(ctx, inv)
+
+        // 2. 构建 request
+        request := &model.Request{
+            Messages:         messages,
+            GenerationConfig: f.genConfig,
+            Tools:            f.toolMap,
+        }
+
+        // ═══ 调用 LLM ═══
+        responseCh, err := inv.Model.GenerateContent(ctx, request)
+        if err != nil { /* 错误处理 */ }
+
+        // ═══ 处理响应 ═══
+        var finalResponse *model.Response
+        for response := range responseCh {
+            // 转发每个 chunk 到外部 event channel
+            eventCh <- f.createEvent(inv, response)
+
+            if response.Done {
+                finalResponse = response
+                break
+            }
+        }
+
+        // ═══ 判断下一步 ═══
+        choice := finalResponse.Choices[0]
+
+        if choice.Message.Content != "" {
+            // 文本回复 → 结束循环
+            break
+        }
+
+        if choice.Message.ToolCalls != nil {
+            // 工具调用 → 执行工具 → 继续循环
+            toolResults := f.executeTools(ctx, inv, choice.Message.ToolCalls)
+            f.appendToolResults(inv, toolResults)
+            continue
+        }
+
+        if choice.Message.Refusal != "" {
+            // 安全拒绝 → 结束循环
+            break
+        }
+    }
+}
+```
+
+**执行循环关键节点**：
+
+1. **messages 构建**（最关键的性能和上下文步骤）
+   - 从 Session Events 提取历史消息
+   - 应用 TimelineFilter + BranchFilter 双重过滤
+   - 插入 System Instruction（含 `{key}` 占位变量替换）
+   - 注入 Memory 预加载内容
+   - 注入 Knowledge 检索结果（如果启用）
+   - 应用 Context Compaction（压缩旧消息）
+
+2. **LLM 调用**
+   - 通过 `Model` 接口抽象，不限具体实现
+   - 支持 channel 流式（`GenerateContent`）和迭代器流式（`GenerateContentIter`）
+   - BeforeModel / AfterModel 回调插入点
+
+3. **响应分发**
+   - `content ≠ null` → 文本，直接结束
+   - `tool_calls ≠ null` → 提取 tool_call_id，执行工具，结果 append 到 messages，继续循环
+   - `refusal ≠ null` → 安全拒绝，结束
+   - `finish_reason = "length"` → Token 耗尽，可在下次 Run 中续写
+
+4. **安全检查**
+   - 每次 LLM 调用后 `llmCallCount++`，达到 `MaxLLMCalls` 返回 StopError
+   - 每次工具迭代后 `toolIterationCount++`，达到 `MaxToolIterations` 发出 flow_error
+
+### 2.4 消息构建（buildMessages 详解）
+
+这是 LLMAgent 最复杂的处理步骤之一：
+
+```
+┌──────────────────────────────────────────────────┐
+│              buildMessages 流程                    │
+│                                                    │
+│  1. 从 Session.Events 加载历史消息                  │
+│     ├─ TimelineFilter 过滤（时间维）                │
+│     └─ BranchFilter 过滤（分支维）                  │
+│                                                    │
+│  2. System Message 构建                            │
+│     ├─ Instruction（含 {key} 占位变量替换）          │
+│     ├─ SystemPrompt（额外的系统消息）                │
+│     ├─ PostToolPrompt（工具调用后引导）              │
+│     ├─ Memory 预加载内容                           │
+│     └─ Session Summary（如果启用）                  │
+│                                                    │
+│  3. 历史 Messages + 当前 Invocation.Message         │
+│                                                    │
+│  4. Context Compaction（如果启用）                  │
+│     ├─ Pass 1：旧工具结果 → 占位符                 │
+│     └─ Pass 2：超大消息截断                        │
+│                                                    │
+│  5. Reasoning Content 处理                         │
+│     └─ 根据 ReasoningContentMode 清除历史思考内容   │
+│                                                    │
+│  6. Token Tailoring（如果模型层启用）               │
+│     └─ 超出上下文窗口时自动裁剪                    │
+└──────────────────────────────────────────────────┘
+```
+
+### 2.5 消息过滤的数学规则
+
+TimelineFilter + BranchFilter 是**交集**关系——只有同时满足两者的 Event 才会被包含。
+
+```
+条件 A（TimelineFilter）：
+  - TimelineFilterAll: event 的时间戳 ∈ (-∞, now]
+  - TimelineFilterCurrentRequest: event 的 requestID == 当前 requestID
+  - TimelineFilterCurrentInvocation: event 的 invocationID == 当前 invocationID 或 祖先 invocationID
+
+条件 B（BranchFilter）：
+  - BranchFilterModeAll: 所有 event
+  - BranchFilterModePrefix: event.FilterKey 是 inv.eventFilterKey 的前缀
+  - BranchFilterModeExact: event.FilterKey == inv.eventFilterKey
+  - BranchFilterModeSubtree: inv.eventFilterKey 是 event.FilterKey 的前缀
+
+最终可见 = A ∩ B ∪ {invocation.Message（始终可见）}
 ```
 
 ---
 
-## 6. 安全机制
+## 3. 实战：自定义 Agent
 
-### 调用次数限制
-
-```go
-agent := llmagent.New("safe-agent",
-    llmagent.WithMaxLLMCalls(10),      // 达到上限返回 StopError
-    llmagent.WithMaxToolIterations(5), // 达到上限发出 flow_error 事件
-)
-```
-
-两个限制独立生效，每次 `runner.Run()` 重新计数。
-
-### 委托可见性
+### 3.1 实现 Agent 接口
 
 ```go
-coordinator := llmagent.New("coordinator",
-    llmagent.WithSubAgents([]agent.Agent{mathAgent, weatherAgent}),
-    llmagent.WithDefaultTransferMessage("Handing off to the specialist"),
+package main
+
+import (
+    "context"
+    "fmt"
+
+    "trpc.group/trpc-go/trpc-agent-go/agent"
+    "trpc.group/trpc-go/trpc-agent-go/event"
+    "trpc.group/trpc-go/trpc-agent-go/model"
+    "trpc.group/trpc-go/trpc-agent-go/runner"
 )
+
+// GreetingAgent 是一个简单的问候 Agent
+type GreetingAgent struct {
+    name   string
+    prompt string
+}
+
+func (a *GreetingAgent) Run(ctx context.Context, inv *agent.Invocation) (<-chan *event.Event, error) {
+    ch := make(chan *event.Event, 1)
+    go func() {
+        defer close(ch)
+        // 构建响应
+        response := &model.Response{
+            Done: true,
+            Choices: []model.Choice{{
+                Index: 0,
+                Message: model.Message{
+                    Role:    model.RoleAssistant,
+                    Content: fmt.Sprintf("%s: Hello, %s!", a.prompt, inv.Message.Content),
+                },
+            }},
+        }
+        agent.EmitEvent(ctx, inv, ch, event.NewResponseEvent(inv.InvocationID, a.name, response))
+    }()
+    return ch, nil
+}
+
+func (a *GreetingAgent) Info() agent.Info {
+    return agent.Info{Name: a.name, Description: "A simple greeting agent"}
+}
+
+func (a *GreetingAgent) SubAgents() []agent.Agent { return nil }
+func (a *GreetingAgent) FindSubAgent(name string) agent.Agent { return nil }
 ```
 
-Transfer 事件始终带 `transfer` 标签发出，UI 可按需过滤。
+### 3.2 使用自定义 Agent
+
+```go
+func main() {
+    myAgent := &GreetingAgent{name: "greeter", prompt: "Welcome"}
+    r := runner.NewRunner("greeting-app", myAgent)
+    defer r.Close()
+
+    ctx := context.Background()
+    events, _ := r.Run(ctx, "user-1", "session-1",
+        model.NewUserMessage("World"),
+    )
+
+    for event := range events {
+        if event.Error != nil {
+            fmt.Printf("Error: %s\n", event.Error.Message)
+            continue
+        }
+        if len(event.Response.Choices) > 0 {
+            fmt.Println(event.Response.Choices[0].Message.Content)
+        }
+        if event.IsRunnerCompletion() { break }
+    }
+    // Output: Welcome: Hello, World!
+}
+```
+
+### 3.3 自定义 Agent 最佳实践
+
+1. **使用 `agent.EmitEvent` 发射事件**：自动处理关闭 channel 语义，不会写入已关闭 channel
+2. **在 goroutine 中执行**：Agent.Run 必须非阻塞返回，所以启动 goroutine
+3. **检查 context.Done()**：支持取消和超时
+4. **defer close(ch)**：确保调用方的事件循环能正常退出
+
+```go
+func (a *MyAgent) Run(ctx context.Context, inv *agent.Invocation) (<-chan *event.Event, error) {
+    ch := make(chan *event.Event, 16)
+    go func() {
+        defer close(ch)
+        for i := 0; i < 10; i++ {
+            select {
+            case <-ctx.Done():
+                return // 支持取消
+            default:
+            }
+            // 发送进度事件
+            agent.EmitEvent(ctx, inv, ch, &event.Event{
+                InvocationID: inv.InvocationID,
+                Author:       a.name,
+                Response:     &model.Response{Done: true, Choices: []model.Choice{{Message: model.Message{Content: fmt.Sprintf("step %d", i)}}}},
+            })
+        }
+    }()
+    return ch, nil
+}
+```
+
+---
+
+## 4. 设计原理
+
+### 4.1 为什么 Agent 通过 channel 返回事件流？
+
+| 方式 | 优点 | 缺点 |
+|------|------|------|
+| 直接返回 string | 简单 | 不支持流式、工具调用、多轮交互 |
+| 回调函数 | 灵活 | 控制反转，调试困难 |
+| **channel 事件流** | 流式+并发安全+可组合 | 调用方需要消费完 |
+
+tRPC-Agent-Go 选择 channel 是因为：
+1. **流式生成**：每个 chunk 是一个 event，UI 可实时渲染
+2. **工具调用可见**：每步 tool call 和 tool result 都是独立 event
+3. **并发安全**：多个 goroutine 可安全地向同一个 channel 发送（内置锁）
+4. **可组合**：Runner 在 channel 之上附加 Session/Memory 逻辑，形成责任链
+
+### 4.2 消息过滤的双维设计
+
+为什么需要两个维度？
+
+- **TimelineFilter**：解决"同一 session 内多轮对话的消息隔离"。例如 A/B 测试中用不同 agent 处理同一 session 不同轮次
+- **BranchFilter**：解决"嵌套 Agent 调用树中的消息可见性"。子 Agent 不应看到兄弟分支的消息
+
+两者组合覆盖了多 Agent 系统中消息隔离的全部场景。
+
+### 4.3 安全限制的设计考量
+
+`MaxLLMCalls` 和 `MaxToolIterations` 分开计数的原因：
+
+- **MaxLLMCalls**：限制 API 调用成本——每次 LLM 调用都产生费用
+- **MaxToolIterations**：限制工具调用循环——工具可能在本地执行，不产生 API 费用但可能耗时
+
+分开计数让用户能分别控制"花费"和"时间"两个维度。
+
+---
+
+## 5. 配置速查
+
+| 配置 | 说明 | 默认 |
+|------|------|------|
+| `WithModel(m)` | LLM 模型 | 必填 |
+| `WithInstruction(i)` | 系统指令，支持 `{key}` 占位 | "" |
+| `WithTools(ts)` | 工具列表 | nil |
+| `WithToolSets(sets)` | 工具集（MCP 等） | nil |
+| `WithSubAgents(a)` | 子 Agent 列表 | nil |
+| `WithMaxLLMCalls(n)` | n≤0 不限制 | 0 |
+| `WithMaxToolIterations(n)` | n≤0 不限制 | 0 |
+| `WithGenerationConfig(c)` | Stream/Temperature/MaxTokens 等 | zero-value |
+| `WithMessageTimelineFilterMode(m)` | 时间维过滤 | TimelineFilterAll |
+| `WithMessageBranchFilterMode(m)` | 分支维过滤 | BranchFilterModePrefix |
+| `WithReasoningContentMode(m)` | 思考内容处理 | DiscardPreviousTurns |
+| `WithToolCallRetryPolicy(p)` | 工具重试策略 | nil（不重试） |
+| `WithAddSessionSummary(b)` | 启用会话摘要 | false |
+| `WithEnableContextCompaction(b)` | 上下文压缩 | false |
+| `WithStructuredOutputJSON(v, strict, desc)` | JSON 结构化输出 | — |
+| `WithCodeExecutor(e)` | 代码执行器（Skills） | nil |
+| `WithAgentCallbacks(c)` | Agent 级别回调 | nil |
