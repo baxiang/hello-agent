@@ -494,6 +494,7 @@ export default withMermaid({
           text: '概览',
           items: [
             { text: '深度学习笔记', link: '/trpc-agent-go/' },
+            { text: '架构图与流程图全集', link: '/trpc-agent-go/18-architecture' },
           ]
         },
         {
