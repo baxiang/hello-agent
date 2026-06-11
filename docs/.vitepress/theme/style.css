@@ -1,0 +1,24 @@
+/* Content area: wider for code + diagrams */
+.vp-doc {
+  max-width: 960px !important;
+}
+
+/* Mermaid diagrams: center and allow horizontal scroll */
+.vp-doc .mermaid {
+  max-width: none;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  margin: 1.5em 0;
+}
+
+.vp-doc .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Mermaid code fence container */
+.vp-doc div[class*="language-mermaid"] {
+  max-width: none !important;
+  overflow-x: auto;
+}

@@ -12,6 +12,15 @@ export default withMermaid({
   
   ignoreDeadLinks: true,
 
+  mermaid: {
+    theme: 'default',
+    themeVariables: {
+      fontSize: '15px',
+    },
+  },
+  mermaidPlugin: {
+    class: 'mermaid',
+  },
   vite: {
     build: {
       chunkSizeWarningLimit: 3000,
