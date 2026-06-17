@@ -218,7 +218,16 @@ export default withMermaid({
       ],
       '/openai-api/': [
         {
-          text: '协议规范',
+          text: '入门基础',
+          items: [
+            { text: '第一次调用：5 分钟跑通', link: '/openai-api/getting-started/00-first-call' },
+            { text: 'messages 数组', link: '/openai-api/getting-started/01-messages-intro' },
+            { text: 'Token 计费单位', link: '/openai-api/getting-started/02-tokens' },
+            { text: '5 个最常用参数', link: '/openai-api/getting-started/03-core-params' },
+          ]
+        },
+        {
+          text: '协议进阶',
           items: [
             { text: '协议总览', link: '/openai-api/00-overview' },
             { text: 'Messages 消息系统', link: '/openai-api/01-messages' },
@@ -230,7 +239,7 @@ export default withMermaid({
           ]
         },
         {
-          text: '国产模型实战',
+          text: '工程实践',
           items: [
             { text: 'DeepSeek V3/V4', link: '/openai-api/07-deepseek' },
             { text: 'Kimi 月之暗面', link: '/openai-api/08-kimi' },
