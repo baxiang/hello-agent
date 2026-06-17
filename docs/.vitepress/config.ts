@@ -591,7 +591,11 @@ export default withMermaid({
               text: '02 - 工具系统',
               collapsed: true,
               items: [
-                { text: '工具基础', link: '/trpc-agent-go/examples/02-tool-system/tool' },
+                { text: '工具索引', link: '/trpc-agent-go/examples/02-tool-system/tool' },
+                { text: '代码执行工具', link: '/trpc-agent-go/examples/02-tool-system/tool-codeexec' },
+                { text: '宿主执行工具', link: '/trpc-agent-go/examples/02-tool-system/tool-hostexec' },
+                { text: 'OpenViking 工具', link: '/trpc-agent-go/examples/02-tool-system/tool-openviking' },
+                { text: 'Web 抓取工具', link: '/trpc-agent-go/examples/02-tool-system/tool-webfetch' },
                 { text: '多工具', link: '/trpc-agent-go/examples/02-tool-system/multitools' },
                 { text: 'Agent 工具', link: '/trpc-agent-go/examples/02-tool-system/agenttool' },
                 { text: '动态 Agent 工具', link: '/trpc-agent-go/examples/02-tool-system/dynamicagenttool' },
@@ -608,7 +612,12 @@ export default withMermaid({
               text: '03 - MCP 工具',
               collapsed: true,
               items: [
-                { text: 'MCP 工具集成', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool' },
+                { text: 'MCP 索引', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool' },
+                { text: 'MCP 主示例', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool-main' },
+                { text: 'STDIO 服务端', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool-stdioserver' },
+                { text: 'SSE 服务端', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool-sseserver' },
+                { text: 'Streamable 服务端', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool-streamableserver' },
+                { text: '动态 HTTP 头', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool-httpheaders' },
                 { text: 'MCP Broker', link: '/trpc-agent-go/examples/03-mcp-tools/mcpbroker' },
               ]
             },
@@ -616,7 +625,13 @@ export default withMermaid({
               text: '04 - Graph 工作流',
               collapsed: true,
               items: [
-                { text: 'Graph 工作流', link: '/trpc-agent-go/examples/04-graph-workflow/graph' },
+                { text: 'Graph 索引', link: '/trpc-agent-go/examples/04-graph-workflow/graph' },
+                { text: '基础拓扑模式', link: '/trpc-agent-go/examples/04-graph-workflow/graph-topology' },
+                { text: '执行控制与检查点', link: '/trpc-agent-go/examples/04-graph-workflow/graph-execution' },
+                { text: '中断与恢复', link: '/trpc-agent-go/examples/04-graph-workflow/graph-interrupt' },
+                { text: '子图与子 Agent', link: '/trpc-agent-go/examples/04-graph-workflow/graph-subagent' },
+                { text: '流式与 IO 约定', link: '/trpc-agent-go/examples/04-graph-workflow/graph-streaming-io' },
+                { text: '高级特性', link: '/trpc-agent-go/examples/04-graph-workflow/graph-advanced' },
               ]
             },
             {
@@ -632,14 +647,26 @@ export default withMermaid({
               text: '06 - Memory 系统',
               collapsed: true,
               items: [
-                { text: 'Memory 系统', link: '/trpc-agent-go/examples/06-memory-system/memory' },
+                { text: 'Memory 索引', link: '/trpc-agent-go/examples/06-memory-system/memory' },
+                { text: '简单模式（Agentic）', link: '/trpc-agent-go/examples/06-memory-system/memory-simple' },
+                { text: '自动模式（Auto）', link: '/trpc-agent-go/examples/06-memory-system/memory-auto' },
+                { text: 'Mem0 集成', link: '/trpc-agent-go/examples/06-memory-system/memory-mem0' },
+                { text: 'TencentDB 集成', link: '/trpc-agent-go/examples/06-memory-system/memory-tencentdb' },
+                { text: '检索对比', link: '/trpc-agent-go/examples/06-memory-system/memory-compare' },
               ]
             },
             {
               text: '07 - Session 管理',
               collapsed: true,
               items: [
-                { text: 'Session 管理', link: '/trpc-agent-go/examples/07-session-management/session' },
+                { text: 'Session 索引', link: '/trpc-agent-go/examples/07-session-management/session' },
+                { text: '基础 Session', link: '/trpc-agent-go/examples/07-session-management/session-simple' },
+                { text: '追加事件', link: '/trpc-agent-go/examples/07-session-management/session-appendevent' },
+                { text: '事件限制', link: '/trpc-agent-go/examples/07-session-management/session-eventlimit' },
+                { text: 'TTL 过期', link: '/trpc-agent-go/examples/07-session-management/session-ttl' },
+                { text: 'Session 钩子', link: '/trpc-agent-go/examples/07-session-management/session-hook' },
+                { text: '人格管理', link: '/trpc-agent-go/examples/07-session-management/session-persona' },
+                { text: 'Graph 集成', link: '/trpc-agent-go/examples/07-session-management/session-graph' },
               ]
             },
             {
@@ -688,7 +715,55 @@ export default withMermaid({
               text: '12 - 知识检索 RAG',
               collapsed: true,
               items: [
-                { text: '知识库', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge' },
+                { text: 'Knowledge 索引', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge' },
+                { text: '基础 RAG', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-basic' },
+                { text: '查询增强', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-query-enhancer' },
+                {
+                  text: '重排器',
+                  collapsed: true,
+                  items: [
+                    { text: 'Cohere 重排', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-reranker-cohere' },
+                    { text: 'Infinity 重排', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-reranker-infinity' },
+                  ]
+                },
+                {
+                  text: '数据源',
+                  collapsed: true,
+                  items: [
+                    { text: '文件源', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-file' },
+                    { text: '目录源', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-directory' },
+                    { text: 'URL 源', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-url' },
+                    { text: '自动源', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-auto' },
+                    { text: '定长切分', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-fixed-chunking' },
+                    { text: '递归切分', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-recursive-chunking' },
+                    { text: 'AST 源', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-sources-ast' },
+                  ]
+                },
+                {
+                  text: '特性',
+                  collapsed: true,
+                  items: [
+                    { text: '智能过滤', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-agentic-filter' },
+                    { text: '元数据过滤', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-metadata-filter' },
+                    { text: '动态管理', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-management' },
+                    { text: '文档提取', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-extractor' },
+                    { text: '字符清洗', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-transform' },
+                    { text: 'GraphRAG', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-graphrag' },
+                    { text: '图可视化', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-graphrag-viewer' },
+                    { text: '代码上下文引擎', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-code-context-engine' },
+                    { text: 'OCR', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-features-ocr' },
+                  ]
+                },
+                {
+                  text: '向量库',
+                  collapsed: true,
+                  items: [
+                    { text: 'pgvector', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-vectorstores-postgres' },
+                    { text: 'Elasticsearch', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-vectorstores-elasticsearch' },
+                    { text: '腾讯 VectorDB', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-vectorstores-tcvector' },
+                    { text: 'Milvus', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge-vectorstores-milvus' },
+                  ]
+                },
                 { text: 'ArXiv 搜索', link: '/trpc-agent-go/examples/12-knowledge-rag/arxivsearch' },
                 { text: 'Wiki 搜索', link: '/trpc-agent-go/examples/12-knowledge-rag/wiki' },
                 { text: 'WeKnora', link: '/trpc-agent-go/examples/12-knowledge-rag/weknora' },
@@ -698,7 +773,14 @@ export default withMermaid({
               text: '13 - 模型与提供商',
               collapsed: true,
               items: [
-                { text: '模型配置', link: '/trpc-agent-go/examples/13-model-provider/model' },
+                { text: 'Model 索引', link: '/trpc-agent-go/examples/13-model-provider/model' },
+                { text: '重试', link: '/trpc-agent-go/examples/13-model-provider/model-retry' },
+                { text: '故障转移', link: '/trpc-agent-go/examples/13-model-provider/model-failover' },
+                { text: '对冲请求', link: '/trpc-agent-go/examples/13-model-provider/model-hedge' },
+                { text: '模型切换', link: '/trpc-agent-go/examples/13-model-provider/model-switch' },
+                { text: '模型选择器', link: '/trpc-agent-go/examples/13-model-provider/model-selector' },
+                { text: 'Prompt 映射', link: '/trpc-agent-go/examples/13-model-provider/model-promptmap' },
+                { text: '批处理', link: '/trpc-agent-go/examples/13-model-provider/model-batch' },
                 { text: '提供商', link: '/trpc-agent-go/examples/13-model-provider/provider' },
               ]
             },
@@ -719,7 +801,44 @@ export default withMermaid({
               text: '15 - 评测与进化',
               collapsed: true,
               items: [
-                { text: '评测系统', link: '/trpc-agent-go/examples/15-evaluation/evaluation' },
+                { text: 'Evaluation 索引', link: '/trpc-agent-go/examples/15-evaluation/evaluation' },
+                {
+                  text: '评测器',
+                  collapsed: true,
+                  items: [
+                    { text: 'LLM 裁判', link: '/trpc-agent-go/examples/15-evaluation/evaluation-llm' },
+                    { text: 'LLM 验证', link: '/trpc-agent-go/examples/15-evaluation/evaluation-llmverifier' },
+                    { text: 'ROUGE', link: '/trpc-agent-go/examples/15-evaluation/evaluation-rouge' },
+                    { text: '结巴分词', link: '/trpc-agent-go/examples/15-evaluation/evaluation-jieba' },
+                    { text: '工具轨迹', link: '/trpc-agent-go/examples/15-evaluation/evaluation-tooltrajectory' },
+                    { text: 'Trace 评测', link: '/trpc-agent-go/examples/15-evaluation/evaluation-trace' },
+                    { text: '上下文消息', link: '/trpc-agent-go/examples/15-evaluation/evaluation-contextmessage' },
+                  ]
+                },
+                {
+                  text: '记录器',
+                  collapsed: true,
+                  items: [
+                    { text: 'EvalSet 录制', link: '/trpc-agent-go/examples/15-evaluation/evaluation-evalsetrecorder' },
+                    { text: '内存记录器', link: '/trpc-agent-go/examples/15-evaluation/evaluation-inmemory' },
+                    { text: '本地记录器', link: '/trpc-agent-go/examples/15-evaluation/evaluation-local' },
+                    { text: 'MySQL 记录器', link: '/trpc-agent-go/examples/15-evaluation/evaluation-mysql' },
+                    { text: 'Langfuse', link: '/trpc-agent-go/examples/15-evaluation/evaluation-langfuse' },
+                  ]
+                },
+                {
+                  text: '集成与编排',
+                  collapsed: true,
+                  items: [
+                    { text: '回调评测', link: '/trpc-agent-go/examples/15-evaluation/evaluation-callbacks' },
+                    { text: '用户模拟', link: '/trpc-agent-go/examples/15-evaluation/evaluation-usersimulation' },
+                    { text: '期望 Runner', link: '/trpc-agent-go/examples/15-evaluation/evaluation-usersimulation-expectedrunner' },
+                    { text: 'Claude Code', link: '/trpc-agent-go/examples/15-evaluation/evaluation-claudecode' },
+                    { text: 'Skill 评测', link: '/trpc-agent-go/examples/15-evaluation/evaluation-skill' },
+                    { text: '评测服务', link: '/trpc-agent-go/examples/15-evaluation/evaluation-server' },
+                    { text: 'Prompt 迭代', link: '/trpc-agent-go/examples/15-evaluation/evaluation-promptiter' },
+                  ]
+                },
                 { text: '进化优化', link: '/trpc-agent-go/examples/15-evaluation/evolution' },
               ]
             },
@@ -727,9 +846,13 @@ export default withMermaid({
               text: '16 - 可观测性',
               collapsed: true,
               items: [
+                { text: 'Callbacks 索引', link: '/trpc-agent-go/examples/16-observability/callbacks' },
+                { text: '回调基础', link: '/trpc-agent-go/examples/16-observability/callbacks-basic' },
+                { text: '鉴权回调', link: '/trpc-agent-go/examples/16-observability/callbacks-auth' },
+                { text: '图片工具回调', link: '/trpc-agent-go/examples/16-observability/callbacks-imagetool' },
+                { text: '计时回调', link: '/trpc-agent-go/examples/16-observability/callbacks-timer' },
                 { text: '遥测', link: '/trpc-agent-go/examples/16-observability/telemetry' },
                 { text: 'Token 追踪', link: '/trpc-agent-go/examples/16-observability/tokentracker' },
-                { text: '回调系统', link: '/trpc-agent-go/examples/16-observability/callbacks' },
               ]
             },
             {
