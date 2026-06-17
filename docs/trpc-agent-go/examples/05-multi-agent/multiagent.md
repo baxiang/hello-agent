@@ -199,3 +199,118 @@ go run .
 
 - **team** 示例：了解 Coordinator 和 Swarm 两种团队协作模式
 - **transfer** 示例：了解基于 `transfer_to_agent` 的动态任务委派机制
+
+## 深度原理
+> 本节源自原「核心组件」深度文（02-agent-types.md 的 Chain/Parallel/Cycle 部分）。
+
+### Chain/Parallel/Cycle 三种编排
+
+三种编排 Agent 都实现 `agent.Agent` 接口，差异集中在 `Run` 方法如何调度子 Agent。核心结构签名（简化）：
+
+```go
+// agent/chainagent/chain_agent.go
+type ChainAgent struct {
+    name      string
+    subAgents []agent.Agent
+}
+
+// agent/parallelagent/parallel_agent.go
+type ParallelAgent struct {
+    name      string
+    subAgents []agent.Agent
+}
+
+// agent/cycleagent/cycle_agent.go
+type CycleAgent struct {
+    name          string
+    subAgents     []agent.Agent // 例如 [planner, executor]
+    maxIterations int
+    exitCondition func(ctx, inv) bool
+}
+```
+
+三者的本质差异在控制流与数据流：
+
+| 类型 | 控制流 | 子 Agent 间数据流 | 终止条件 |
+|------|--------|------------------|---------|
+| **ChainAgent** | 顺序 | A 的 last_response → B 的 Message | 跑完最后一个子 Agent |
+| **ParallelAgent** | 并发（goroutine + WaitGroup） | 无依赖，共享同一输入 Message | 全部子 Agent 完成 |
+| **CycleAgent** | 循环 | 上一轮输出进入下一轮 Invocation | 退出条件命中 / 达到 maxIterations |
+
+**关键实现细节**：
+- 三者均通过 `inv.Clone()` 派生子 Invocation，保留 Session/Memory 等上下文；ParallelAgent 额外用 `sync.Mutex` 保护共享结果切片，确保并发上下文隔离。
+- ChainAgent 通过 `WithInvocationMessage()` 把上一个 Agent 的 `last_response` 注入下一个 Agent 的输入。
+- 子 Agent 的事件（含中间 tool call）全部原样透传，外部可观察完整执行过程；ParallelAgent 并发转发时需带索引标识避免 UI 混乱。
+
+### Multi-Agent 编排设计
+
+框架提供这三种模式，对应工作流拓扑的三种基本形态：
+
+- **Chain** 解决「阶段化流水线」——任务可拆为有序步骤，前序输出是后序必要输入（规划 → 研究 → 撰写）。
+- **Parallel** 解决「多视角分析」——同一输入需从不同维度独立处理，彼此无依赖（法律 / 技术 / 商业）。
+- **Cycle** 解决「渐进优化」——需要反复迭代直到质量达标（生成 → 评审 → 改进）。
+
+这三种是 DAG（有向无环图）的常见简化形态。当任务需要条件分支、多入度节点、跨阶段共享中间状态时，应升级到 GraphAgent。
+
+### 设计哲学
+
+**顺序 vs 并发 vs 循环的决策依据**：
+
+1. **任务间是否存在数据依赖？**
+   - 严格顺序依赖 → Chain（B 必须等 A 完成）
+   - 完全独立 → Parallel（可同时跑）
+   - 存在反馈回路（C 的结果要让 A 再跑一遍）→ Cycle
+
+2. **延迟预算如何？**
+   - Chain：总延迟 = T_A + T_B + T_C（累加）
+   - Parallel：总延迟 = max(T_A, T_B, T_C)（取最大值）
+   - Cycle：总延迟不可控，必须设 `maxIterations` 兜底
+
+3. **结果如何产出？**
+   - Chain 直接取最后一个 Agent 输出
+   - Parallel 需二次合并（框架默认用 `\n\n---\n\n` 拼接，复杂场景需 LLM 再加工）
+   - Cycle 取最后一轮迭代输出
+
+**与 Ralph Loop 的区别**：Ralph Loop 在 Runner 层实现循环（验证驱动），CycleAgent 在 Agent 层实现（LLM 驱动）。
+
+### 配置速查
+
+#### ChainAgent
+
+| Functional Option | 作用 |
+|------------------|------|
+| `chainagent.WithSubAgents([]agent.Agent)` | 注入有序子 Agent 列表，数组顺序即执行顺序 |
+
+配合使用的子 Agent 选项：
+
+| Functional Option | 作用 |
+|------------------|------|
+| `llmagent.WithAddContextPrefix(bool)` | 是否在传递给下游的上下文前加前缀（如 "For context: ..."）；传 JSON 等结构化数据时建议关闭 |
+
+#### ParallelAgent
+
+| Functional Option | 作用 |
+|------------------|------|
+| `parallelagent.WithSubAgents([]agent.Agent)` | 注入并发子 Agent 列表 |
+
+并行模式推荐配置：
+
+| 配置项 | 推荐值 | 原因 |
+|--------|--------|------|
+| `model.GenerationConfig.Stream` | `false` | 多 Agent 同时流式输出会字符级交叉 |
+
+#### CycleAgent
+
+| Functional Option | 作用 |
+|------------------|------|
+| `cycleagent.WithSubAgents([]agent.Agent)` | 注入循环体子 Agent 列表（如 [generator, critic]） |
+| `cycleagent.WithMaxIterations(int)` | 最大迭代次数，必填以兜底延迟 |
+| `cycleagent.WithEscalationFunc(func(*event.Event) bool)` | 自定义提前退出条件，返回 `true` 即停止（对应内部 `exitCondition` 字段） |
+
+#### 编排模式总览
+
+| 模式 | 适用场景 | 延迟特点 | 结果特点 |
+|------|---------|---------|---------|
+| **ChainAgent** | 严格顺序依赖的流水线 | 延迟累加 | 最终步骤的输出 |
+| **ParallelAgent** | 无依赖的独立分析 | 取最大值 | 合并多个结果 |
+| **CycleAgent** | 需要多轮迭代优化 | 不可控（需限制上限） | 最后迭代的输出 |

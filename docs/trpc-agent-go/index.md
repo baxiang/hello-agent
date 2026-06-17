@@ -238,18 +238,97 @@ trpc.group/trpc-go/trpc-agent-go/
 
 ---
 
+## 6. 生态与集成
+
+> 本节源自原「生态与进阶」深度文（14-ecosystem.md），融合辅助模块与生态关系。
+
+### 生态全景
+
+tRPC-Agent-Go 以三大支柱融入 AI 工程生态：
+
+```
+                        tRPC-Agent-Go
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
+   │tRPC-A2A-Go│        │tRPC-MCP-Go│         │  Go 生态  │
+   │跨框架互操作│        │  工具协议  │         │  高并发   │
+   └─────────┘          └─────────┘          └─────────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
+   │  AG-UI  │          │ Gateway │          │OpenClaw │
+   │ 用户UI   │          │ HTTP API│          │ IM 网关  │
+   └─────────┘          └─────────┘          └─────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+   ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
+   │OpenTelemetry│      │Langfuse │          │ Debug   │
+   │  链路追踪   │      │ LLM分析 │          │ Server  │
+   └─────────┘          └─────────┘          └─────────┘
+```
+
+### 三大协议定位
+
+| 协议 | 全称 | 生态角色 |
+|------|------|----------|
+| **MCP** | Model Context Protocol | 工具调用标准，统一 Function Tool / 文件系统 / 外部能力接入 |
+| **A2A** | Agent-to-Agent | 跨框架互操作，与 AutoGen / CrewAI / ADK 等 Python 框架互通 |
+| **AG-UI** | Agent-UI 协议 | SSE 实时交互，前端流式渲染 Agent 推理过程 |
+
+### 辅助模块矩阵
+
+| 模块 | 职责 | 后端 / 实现 |
+|------|------|-------------|
+| **Artifact** | 版本化制品存储（图片 / 文本 / 报告） | inmemory / S3 / COS（腾讯云） |
+| **Code Executor** | 代码执行隔离 | local / Docker / E2B（云沙箱）/ Jupyter |
+| **Planner** | LLM 调用前任务分解与工具选择 | Builtin Planner / Custom 接口 |
+| **Evaluation** | 评测集 + 重复运行 + 指标统计 | Accuracy / Latency / TokenUsage |
+| **PromptIter** | 基于评测结果自动迭代 Prompt | 与 Evaluation 形成优化闭环 |
+| **Agent Skills** | Anthropic Skills 规范实现 | skilltool 工具集 + 热更新 |
+
+### 部署与安全考量
+
+**代码执行安全层级**（隔离强度递增）：
+
+| 执行器 | 隔离性 | 适用场景 |
+|--------|--------|----------|
+| <code>local</code> | 低（可访问宿主机） | 快速迭代、可信环境 |
+| <code>container</code>（Docker） | 中（容器隔离） | 生产推荐 |
+| <code>e2b</code> | 高（云端隔离 + 审计） | 多租户、最强安全 |
+| <code>jupyter</code> | 低（交互式） | 教学 / 演示 |
+
+**制品存储后端选择**：<code>inmemory</code>（开发测试）/ <code>s3</code>（AWS 生产）/ <code>cos</code>（腾讯云生产）。
+
+**Agent Skills 安全模型**：隔离工作区（临时目录，执行后清理）+ 策略模式（命令白名单）+ 环境变量清洗（移除敏感 env）+ 超时控制。
+
+### 可观测性集成
+
+| 集成 | 层级 | 用途 |
+|------|------|------|
+| **OpenTelemetry** | 通用链路追踪 | 标准 Trace / Span 接入企业监控 |
+| **Langfuse** | LLM 专用分析 | Token 成本、Prompt 调试、评估对比 |
+| **Debug Server** | 本地调试 | 实时查看 Event 流与 Agent 状态 |
+
+---
+
 ## 学习路线建议
 
-1. **[Agent 系统](./01-agent)** — 理解 LLMAgent 执行循环，是所有 Agent 类型的基础
-2. **[Model 模型层](./04-model)** — 理解 LLM 调用机制，如何接入不同模型
-3. **[Tool 工具系统](./05-tool)** — 理解 Agent 如何与外部交互
-4. **[Runner 执行器](./03-runner)** — 理解完整的请求生命周期
-5. **[Multi-Agent 编排](./02-agent-types)** — Chain/Parallel/Cycle 组合模式
-6. **[Session 会话](./07-session)** — 对话上下文持久化
-7. **[Memory 记忆](./08-memory)** — 跨对话用户信息积累
-8. **[Knowledge RAG](./09-knowledge)** — 知识库检索增强
-9. **[Graph Agent（上）](./10-graph)** — 图工作流基础
-10. **[Graph Agent（下）](./11-graph-advanced)** — 高级图模式
-11. **[Server 与协议](./12-server)** — 生产部署
-12. **[可观测性](./13-observability)** — 监控与调试
-13. **[生态与进阶](./14-ecosystem)** — Skill/Artifact/Planner/Evaluation
+1. **[Agent 基础](./examples/01-agent-basics/)** — 理解 LLMAgent 执行循环，是所有 Agent 类型的基础
+2. **[Model 模型层](./examples/13-model-provider/model)** — 理解 LLM 调用机制，如何接入不同模型
+3. **[Tool 工具系统](./examples/02-tool-system/tool)** — 理解 Agent 如何与外部交互
+4. **[Session 会话](./examples/07-session-management/session)** — 对话上下文持久化
+5. **[Multi-Agent 编排](./examples/05-multi-agent/multiagent)** — Chain/Parallel/Cycle 组合模式
+6. **[Memory 记忆](./examples/06-memory-system/memory)** — 跨对话用户信息积累
+7. **[Knowledge RAG](./examples/12-knowledge-rag/knowledge)** — 知识库检索增强
+8. **[Graph 工作流](./examples/04-graph-workflow/graph)** — 图工作流（含基础与高级模式）
+9. **[MCP 协议](./examples/03-mcp-tools/mcptool)** — 工具标准协议
+10. **[A2A 协议](./examples/09-a2a-protocol/)** — 跨框架互操作
+11. **[AG-UI 协议](./examples/10-agui-protocol/)** — 前端实时交互
+12. **[可观测性](./examples/16-observability/callbacks)** — 监控与调试
+13. **[示例总览](./examples/)** — 完整示例目录（含协议服务端总览）

@@ -156,6 +156,112 @@ Knowledge Service（知识服务）
 | `NewCodeSearchTool` | 代码检索（AST chunk） | code_context_engine |
 | `NewCodeGraphSearchTool`（ToolSet） | 图检索 + 遍历 + 路径 | graphrag |
 
+## 深度原理
+> 本节源自原「核心组件」深度文（09-knowledge.md）。
+
+### Knowledge Service 核心接口
+
+```go
+// knowledge/knowledge.go
+type Knowledge interface {
+    Load(ctx context.Context, opts ...LoadOption) error
+    Search(ctx context.Context, query string, opts ...SearchOption) ([]*SearchResult, error)
+    AddSource(ctx context.Context, src source.Source) error
+    RemoveSource(ctx context.Context, name string) error
+    Close() error
+}
+
+type SearchResult struct {
+    Document *document.Document
+    Score    float64  // 0.0 - 1.0
+}
+```
+
+`Load` 完成离线入库，`Search` 由 Tool 在线触发；`AddSource`/`RemoveSource` 支持运行时动态增删（详见 [`management`](./knowledge-features-management.md)）。
+
+### RAG 架构设计
+
+端到端 pipeline：
+
+```
+[知识源] → [Extractor(可选)] → [Reader] → [Splitter] → [Embedder] → [VectorStore]
+                                                                          │
+[用户问题] → [QueryEnhancer(可选)] → [Embedder] → [VectorStore.Search]   │
+                                                      │                  │
+                                                      ▼                  ▼
+                                                    [Reranker(可选)] ← ──┘
+                                                      │
+                                                      ▼
+[LLM] ← [Filter(可选)] ← [检索结果 + 相关文档]
+```
+
+`Load` 内部采用**双并发池**：
+- Source 级并发（`WithSourceConcurrency`）：并发解析不同数据源
+- Doc 级并发（`WithDocConcurrency`）：并发 Embedding + 存储
+- 两池通过 channel 连接，构成生产者-消费者模式
+
+### Source 与 VectorStore
+
+两者是正交的独立关注点：
+
+| 维度 | Source | VectorStore |
+|------|--------|-------------|
+| 职责 | 文本/文件/URL → Document | 向量存储 + 相似度搜索 |
+| 关注点 | Extractor / Splitter / Transform | 索引 / 过滤 / 持久化 |
+| 可选实现 | file / dir / url / auto / repo / ast | inmemory / pgvector / es / milvus / tcvector |
+
+分离后用户可：同一 VectorStore 对接不同 Embedder（A/B 测试 embeddings 质量），或同一 Embedder 对接不同 VectorStore（开发用 In-Memory，生产用 PGVector）。
+
+### 设计哲学
+
+**为什么抽象成 pipeline**：RAG 各阶段（解析、分块、向量化、存储、重排、过滤）相互独立、各有复杂度，pipeline 化让每环节可独立替换或旁路，避免"一处改动牵全身"。
+
+**Embedder / Reranker 可插拔**：
+- Embedder 决定召回（bi-encoder，文本→向量，速度快）
+- Reranker 决定精排（cross-encoder，query+doc 联合打分，质量高但慢）
+- 典型组合：VectorStore 召回 10 候选 → Reranker 取 Top 3（成本 +1 次 cross-encoder 调用，质量显著提升，尤其长文档）
+
+**为什么 Search 暴露为 Tool 而非直接注入 Agent**：
+1. Agent 自主决定何时搜、搜什么
+2. 只在需要时调用，控制成本
+3. 多知识库 → 多 Tool，Agent 自行选择
+4. 搜索调用作为 tool_call 事件可观测
+
+**智能过滤 vs 静态过滤**：静态 `WithFilter` 固定不可变；`AgenticFilterSearchTool` 让 LLM 根据查询自动构建 filter（适合元数据丰富的场景，详见 [`agentic-filter`](./knowledge-features-agentic-filter.md)）。
+
+### 配置速查
+
+`knowledge.New` 的 functional options：
+
+| Option | 作用 | 默认 / 说明 |
+|--------|------|------------|
+| `WithEmbedder(e)` | 向量化器 | 必填，OpenAI / Gemini / Ollama / HF |
+| `WithVectorStore(vs)` | 向量库后端 | 必填，inmemory / pgvector / es / milvus / tcvector |
+| `WithSources(srcs)` | 注册数据源 | 可多次调用累加 |
+| `WithEnableSourceSync(true)` | 启用源同步 | 文件变动时自动 reload |
+| `WithReranker(r)` | 重排器 | 可选，cohere / infinity / TopK |
+| `WithQueryEnhancer(e)` | 查询改写 | 可选，passthrough / LLM |
+| `WithExtractor(e)` | 文档转换器 | 可选，Docling（PDF/DOCX/HTML → MD） |
+
+`Load` 的 runtime options：
+
+| Option | 作用 | 典型值 |
+|--------|------|--------|
+| `WithShowProgress(true)` | 打印进度 | — |
+| `WithLoadProgressCallback(cb)` | 进度回调 | 打印 ETA / 错误 |
+| `WithSourceConcurrency(n)` | Source 解析并发 | 4 |
+| `WithDocConcurrency(n)` | Embed + Store 并发 | 64 |
+
+`knowledgetool.NewKnowledgeSearchTool` 的 options：
+
+| Option | 作用 |
+|--------|------|
+| `WithToolName(name)` | 工具名（多 KB 时区分） |
+| `WithToolDescription(d)` | 给 LLM 的工具说明 |
+| `WithMaxResults(n)` | 返回文档数上限 |
+| `WithMinScore(s)` | 相关性阈值过滤 |
+| `WithFilter(m)` | 静态元数据过滤 |
+
 ## 学习路径建议
 
 1. **先读 [`basic`](./knowledge-basic.md)**：理解五步主干，这是所有示例的基础（15 分钟）

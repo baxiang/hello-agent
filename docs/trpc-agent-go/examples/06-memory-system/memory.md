@@ -112,6 +112,166 @@ cd examples/memory/compare    && go run .           # 一次性基准脚本
 
 切换后端时还需 `SQLITE_MEMORY_DSN` / `REDIS_ADDR` / `MYSQL_*` / `PG_*` / `PGVECTOR_*` 等，详见各子示例。
 
+## 深度原理
+
+> 本节源自原「核心组件」深度文（08-memory.md），整合接口源码、设计哲学与配置速查。
+
+### Memory Service 核心接口
+
+所有存储后端、所有模式都实现同一个接口，这是整个 Memory 系统解耦的根基：
+
+```go
+// memory/memory.go
+type Service interface {
+    AddMemory(ctx, userKey, memory, topics) error
+    UpdateMemory(ctx, memoryKey, memory, topics) error
+    DeleteMemory(ctx, memoryKey) error
+    ClearMemories(ctx, userKey) error
+    SearchMemories(ctx, userKey, query) ([]*Memory, error)
+    ReadMemories(ctx, userKey, limit) ([]*Memory, error)
+    Tools() []tool.Tool       // 返回 Agent 可见的工具
+    Close() error
+}
+```
+
+记忆实体的结构体（注意 `ID` 是内容 hash 的语义，决定了记忆的覆盖/幂等行为）：
+
+```go
+type Memory struct {
+    ID        string    // 内容 hash（同内容同 ID）
+    AppName   string
+    UserID    string
+    Memory    string    // 记忆内容
+    Topics    []string  // 话题标签
+    CreatedAt time.Time
+    UpdatedAt time.Time
+}
+```
+
+**UserKey 的语义**：所有读写方法都以 `userKey` 作为隔离维度。Memory 的隔离边界是 `{appName, userID}`（不含 `sessionID`），这正是它与 Session 的本质区别——Memory 跨会话持久，Session 单次会话。
+
+**`Tools()` 方法的设计**：把"哪些 memory 操作暴露给 Agent"的决定权交给 Service 实现。同一份接口，Agentic 模式返回 4-6 个工具，Auto 模式只返回 `memory_search`——这是模式差异落地的关键钩子。
+
+### Extractor 设计机制
+
+Extractor 是 Auto 模式的核心引擎——一个独立的、可配置的"对话分析器"：
+
+```go
+// memory/extractor/extractor.go
+type Extractor struct {
+    model    model.Model           // 用于分析的 LLM（可独立于 Agent 的模型）
+    checks   []ExtractCheck        // 提取检查器链
+    prompt   string                // 提取 prompt 模板
+}
+
+// ExtractCheck：判断是否应该提取记忆
+type ExtractCheck func(ctx context.Context, ec *ExtractionContext) bool
+
+type ExtractionContext struct {
+    Session  *session.Session
+    Messages []model.Message       // 最近几轮对话
+    Existing []*memory.Memory      // 已有记忆（避免重复）
+}
+```
+
+**Checker 机制的设计考量**：提取一次记忆要调用一次 LLM（成本高、延迟高），因此 `ExtractCheck` 链式短路——只要任一 check 返回 false，立即跳过本次提取。内置三个 check 各自解决一类浪费：
+
+| Check | 解决的问题 |
+|------|---------|
+| `CheckUserMessageOnly` | 没有 user 输入的回合无需分析 |
+| `CheckTurnCount(N)` | 每 N 轮才提取一次，避免每轮都烧 token |
+| `CheckNoToolCallInProgress` | 工具调用中途不打断 |
+
+**异步 Worker 池的设计**：Extractor 的执行被丢进队列、由后台 worker 消费，主对话流不等它返回。这个设计的三个权衡：
+
+- **不阻塞用户响应**——提取 LLM 调用可能耗时 2-5s，串行会让对话卡顿
+- **失败不影响主流程**——提取失败，下一轮会重新评估
+- **队列满时丢弃**——记忆是非关键路径，宁可丢一次提取也不堆积请求
+
+### Agentic vs Auto 的深层设计
+
+框架同时提供两种模式，并不是冗余——它们解决的是**对 LLM 判断的不同信任度**：
+
+- **Agentic 模式**：信任主 Agent 的判断——"LLM 在对话中知道什么该记住"，于是让它主动调用 `memory_add`
+- **Auto 模式**：不信任主 Agent 的判断——"主 Agent 的注意力应该在对话本身，记忆提取交给专职 LLM"
+
+为什么不合成一种？因为 Extractor 作为独立组件，可以做出主 Agent 做不到的三件事：
+
+1. **用更精确的 prompt**——主 Agent 的 system prompt 要兼顾对话质量，Extractor 的 prompt 可以专注记忆提取这一件事
+2. **用不同的模型**——主 Agent 可能需要 GPT-4 级别的能力来对话，但提取记忆这种结构化任务可以用 `gpt-4o-mini` 等更便宜的模型
+3. **做更严格的验证**——Extractor 的输出是结构化的 `MemoryOp`（add/update/delete + OldID），可以被框架校验；而 Agent 直接调工具则是即兴的
+
+两者的边界：当你希望对话流程**可见可控**、每条记忆的写入都能在工具调用日志里追踪，选 Agentic；当你希望用户**无感知**、对话体验纯粹，选 Auto。两者也能混合——通过 `WithAutoMemoryExposedTools` 把写工具同时交给 Extractor 和 Agent（双写）。
+
+### 存储后端架构
+
+8 种后端共享同一份 `Service` 接口，差异只在检索引擎。架构上分两条主线：
+
+**关键词 vs 向量的设计分野**：
+
+- 关键词后端（`sqlite` / `redis` / `mysql` / `postgres`）做精确匹配——记忆内容必须出现查询词
+- 向量后端（`sqlitevec` / `mysqlvec` / `pgvector`）做语义召回——"用户喜欢什么类型的音乐" 能找到 "喜欢古典乐和爵士" 的记忆，即使零共同关键词
+
+`pgvector` 的配置揭示了向量后端的三个关键参数：
+
+```go
+memoryService, _ := pgvector.NewService(
+    pgvector.WithPostgresClientDSN("postgres://..."),
+    pgvector.WithEmbedder(openaiembedder.New()),  // 用什么模型生成向量
+    pgvector.WithVectorDimensions(1536),          // 向量维度必须匹配 embedder
+    pgvector.WithTopK(10),                        // 召回条数
+)
+```
+
+**选型考量**：
+
+- **开发测试** → `inmemory`（默认，零依赖）
+- **本地单机** → `sqlite`（关键词）或 `sqlitevec`（向量），先用 [`compare`](./memory-compare.md) 跑自己的查询样本看命中率
+- **高并发** → `redis`（关键词）
+- **关系型持久化** → `mysql` / `postgres`，按是否需要语义检索选 vec 变种
+- **不要先选向量后端**——关键词后端对结构化事实（姓名、偏好）命中率反而更高且零 embedding 成本
+
+### 配置速查
+
+#### Service 层（`memoryinmemory.*`）
+
+| Option | 作用 | 默认/说明 |
+|------|------|---------|
+| `WithExtractor(extractor)` | 启用 Auto 模式，注入提取器 | 不设则无后台提取 |
+| `WithAsyncMemoryNum(n)` | 后台 worker 数 | 控制并发提取能力 |
+| `WithMemoryQueueSize(n)` | 提取队列容量 | 满则丢弃（非关键路径） |
+| `WithMemoryJobTimeout(d)` | 单次提取超时 | 防 LLM 卡死 |
+| `WithAutoMemoryExposedTools(...)` | 把写工具同时暴露给 Agent | 实现双写（Extractor + Agent） |
+
+#### Extractor 层（`extractor.*`）
+
+| Option / Check | 作用 |
+|------|------|
+| `extractor.NewExtractor(model, opts...)` | 构造器，model 可独立于 Agent 模型 |
+| `WithChecks(checks...)` | 设置检查器链（短路求值） |
+| `WithPrompt(tpl)` | 自定义提取 prompt 模板 |
+| `CheckUserMessageOnly()` | 仅 user 消息回合才提取 |
+| `CheckTurnCount(n)` | 每 n 轮提取一次 |
+| `CheckNoToolCallInProgress()` | 工具调用中不提取 |
+
+#### Agent 层（`llmagent.*`）
+
+| Option | 作用 |
+|------|------|
+| `WithMemoryPreload(true)` | 预加载最近记忆到 system prompt |
+| `WithMemoryPreloadLimit(n)` | 预加载条数上限（防 prompt 膨胀） |
+
+#### PGVector 后端（`pgvector.*`）
+
+| Option | 作用 |
+|------|------|
+| `WithPostgresClientDSN(dsn)` | 数据库连接串 |
+| `WithEmbedder(e)` | embedding 模型 |
+| `WithVectorDimensions(d)` | 向量维度（需匹配 embedder） |
+| `WithTopK(k)` | 召回条数 |
+
+---
+
 ## 学习路径建议
 
 1. **先读 [`simple`](./memory-simple.md)**：理解 Service + Tools + Runner 三段式接线，这是所有模式的基础

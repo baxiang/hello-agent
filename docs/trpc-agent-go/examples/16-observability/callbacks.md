@@ -150,6 +150,173 @@ basic / timer 共用相同的 flag 风格（`-model` / `-streaming`），auth �
 | Metrics + Span | timer 的全部回调 | 性能观测、SLA 监控 |
 | ToolResultMessages | imagetool | 多模态消息构造 |
 
+## 深度原理
+
+> 本节源自原「核心组件」深度文（13-observability.md，已融入本页）。
+
+### 可观测性架构
+
+#### 追踪层次
+
+```
+Request ──── Runner Span ──── Agent Span ──── Model Span
+                         │                │
+                         ├─ Session Span  ├─ Tool Span
+                         └─ Memory Span   └─ Planner Span
+```
+
+每个组件在调用时自动创建子 Span，通过 `SpanContext` 串联。
+
+#### Span 属性
+
+每个 Span 自动携带的属性：
+
+```go
+// Runner Span
+attribute.String("runner.app", "my-app")
+attribute.String("runner.user_id", "user-1")
+attribute.String("runner.session_id", "session-1")
+attribute.String("runner.request_id", "req-123")
+
+// Agent Span
+attribute.String("agent.name", "assistant")
+attribute.String("agent.type", "llmagent")
+
+// Model Span
+attribute.String("model.name", "gpt-4o-mini")
+attribute.Int("model.prompt_tokens", 150)
+attribute.Int("model.completion_tokens", 80)
+attribute.String("model.finish_reason", "stop")
+
+// Tool Span
+attribute.String("tool.name", "get_weather")
+attribute.String("tool.call_id", "call_abc123")
+attribute.Bool("tool.success", true)
+```
+
+#### 架构总览
+
+```
+Agent 应用
+    │
+    ├─ OpenTelemetry SDK
+    │   ├─ Trace Exporter → Jaeger / Grafana Tempo
+    │   ├─ Metric Exporter → Prometheus
+    │   └─ Log Exporter → Loki / ELK
+    │
+    ├─ Langfuse SDK
+    │   └─ Langfuse Cloud / Self-Hosted
+    │
+    ├─ Debug Server (开发/调试)
+    │   └─ Web UI: localhost:3000
+    │
+    └─ Execution Trace (审计)
+        └─ 结构化输出 → 数据库
+```
+
+### 回调系统设计
+
+回调系统是可观测性的应用层入口。通过 Plugin 模式实现全局日志拦截，接口签名如下：
+
+```go
+type StructuredLogPlugin struct{}
+
+func (p *StructuredLogPlugin) AfterAgent(ctx context.Context, inv *agent.Invocation, err error) error
+```
+
+`AfterAgent` 是 Agent 层级的 After 钩子，通过 `agent.Invocation` 可获取 AgentName、InvocationID、Session 等执行上下文。Model / Tool 层的 BeforeModel / AfterModel / BeforeTool / AfterTool 接口设计详见各子示例（[basic](./callbacks-basic.md) / [auth](./callbacks-auth.md) / [timer](./callbacks-timer.md) / [imagetool](./callbacks-imagetool.md)）。
+
+### OpenTelemetry 集成
+
+OTel 通过标准 TracerProvider + Exporter 模式接入：
+
+```go
+func initTelemetry() func() {
+    exporter, _ := otlptracegrpc.New(ctx,
+        otlptracegrpc.WithEndpoint("localhost:4317"),
+        otlptracegrpc.WithInsecure(),
+    )
+    tp := trace.NewTracerProvider(
+        trace.WithBatcher(exporter),
+        trace.WithResource(resource.NewWithAttributes(
+            semconv.ServiceName("my-agent-service"),
+        )),
+    )
+    otel.SetTracerProvider(tp)
+    return func() { tp.Shutdown(ctx) }
+}
+```
+
+在 `Runner.Run` 中通过 `agent.WithSpanAttributes` 附加自定义属性：
+
+```go
+events, _ := r.Run(ctx, userID, sessionID, message,
+    agent.WithSpanAttributes(
+        attribute.String("custom.user_tier", "premium"),
+        attribute.String("custom.feature_flag", "new_model"),
+    ),
+)
+```
+
+完整遥测栈搭建（Jaeger / Prometheus / docker compose）详见 [`telemetry.md`](./telemetry.md)。
+
+### 设计哲学
+
+#### OTel Span 与 Execution Trace 的分工
+
+```go
+traceData := agent.GetExecutionTrace(invocation)
+// traceData 包含：Invocation 树、LLM 调用次数、工具调用列表、开始/结束时间
+```
+
+| 维度 | OTel Span | Execution Trace |
+|------|-----------|-----------------|
+| 时机 | 实时调用链追踪 | 执行完成后完整结构 |
+| 用途 | 接入 Jaeger / Prometheus | 分析、审计 |
+| 内容 | Span 属性 + 父子关系 | Invocation 树 + 调用统计 + 时间戳 |
+
+两者互补：OTel Span 面向运维监控，Execution Trace 面向事后分析。
+
+#### 可观测性分层选型
+
+| 场景 | 工具 |
+|------|------|
+| 生产监控 | OTel + Grafana 全家桶 |
+| LLM 质量分析 | Langfuse |
+| 开发调试 | Debug Server |
+| 安全审计 | Execution Trace |
+
+### 配置速查
+
+#### Span 属性注入（trpc-agent-go）
+
+| Functional Option | 参数 | 作用域 |
+|-------------------|------|--------|
+| `agent.WithSpanAttributes(attrs ...attribute.KeyValue)` | OTel 属性键值对 | `Runner.Run` 调用 |
+
+#### Langfuse 集成
+
+| Functional Option | 参数 | 说明 |
+|-------------------|------|------|
+| `langfuse.WithPublicKey(key string)` | Langfuse 公钥 | 必填 |
+| `langfuse.WithSecretKey(key string)` | Langfuse 密钥 | 必填 |
+| `langfuse.WithHost(host string)` | Langfuse 服务地址 | 默认 Cloud |
+
+#### Langfuse 属性 Key（通过 `WithSpanAttributes` 注入）
+
+| 属性 Key | 用途 |
+|----------|------|
+| `langfuse.user.id` | 用户关联 |
+| `langfuse.session.id` | 会话关联 |
+| `langfuse.trace.metadata` | Trace 元数据（JSON 字符串） |
+
+#### Debug Server
+
+| Functional Option | 参数 | 说明 |
+|-------------------|------|------|
+| `debugserver.WithRunner(r *agent.Runner)` | Runner 实例 | 必填 |
+| `debugserver.WithPort(port int)` | 监听端口 | 默认 3000 |
+
 ## 学习路径建议
 
 1. **先读 [`basic`](./callbacks-basic.md)**：理解三级回调的完整接线、四种短路返回、context 取 Invocation——这是所有其他示例的基础

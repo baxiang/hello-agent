@@ -137,6 +137,153 @@ cd examples/session/graph       && go run .                       # 交互
 
 切换后端时还需 `SQLITE_SESSION_DSN` / `REDIS_ADDR` / `PG_*` / `PGVECTOR_*`（含 `PGVECTOR_EMBEDDER_MODEL`、`OPENAI_EMBEDDING_API_KEY`）/ `MYSQL_*` / `CLICKHOUSE_*` 等，详见各子示例。
 
+## 深度原理
+
+> 本节源自原「核心组件」深度文（`07-session.md`）。
+
+### Session 核心接口
+
+Session 由 `Key + Events + State + 可选元数据` 构成，定义在 `session/session.go`：
+
+```go
+type Session struct {
+    ID        string                 // 会话 ID
+    AppName   string                 // 应用名（多租户隔离）
+    UserID    string                 // 用户 ID
+    State     StateMap               // 键值状态
+    Events    []event.Event          // 消息历史
+    Tracks    map[Track]*TrackEvents // AG-UI track 事件
+    Summaries map[string]*Summary    // 按 filterKey 的摘要
+    UpdatedAt time.Time
+    CreatedAt time.Time
+}
+
+type Key struct {
+    AppName   string
+    UserID    string
+    SessionID string
+}
+
+type StateMap map[string][]byte // 状态值统一用 []byte，避免类型耦合
+```
+
+对外暴露的 `Service` 接口是所有后端（inmemory / sqlite / redis / postgres / pgvector / mysql / tdsql / clickhouse / noop）共同遵守的契约：
+
+```go
+type Service interface {
+    CreateSession(ctx, key, state, opts...) (*Session, error)
+    GetSession(ctx, key, opts...) (*Session, error)
+    ListSessions(ctx, userKey, opts...) ([]*Session, error)
+    DeleteSession(ctx, key, opts...) error
+    UpdateAppState(ctx, appName, state) error
+    UpdateUserState(ctx, userKey, state) error
+    UpdateSessionState(ctx, key, state) error
+    AppendEvent(ctx, session, event, opts...) error
+    CreateSessionSummary(ctx, sess, filterKey, force) error
+    EnqueueSummaryJob(ctx, sess, filterKey, force) error
+    GetSessionSummaryText(ctx, sess, opts...) (string, bool)
+    Close() error
+}
+```
+
+### 事件与状态管理
+
+- **Events 是有序数组而非 append-only 日志**：每次 LLM 调用需全量读历史 + TTL 需物理删除旧事件 + 摘要需替换旧事件，故采用「事件数组 + 写入时裁剪」模式。
+- **StateMap 统一用 `[]byte`**：跨后端兼容（Redis 存 bytes、SQL 存 TEXT/BLOB），调用方自行序列化，避免 JSON 反序列化的类型失真（如 `int` vs `float64`）。
+- **状态合并的三层 scope**：`UpdateSessionState` / `UpdateAppState` / `UpdateUserState` 分别针对单会话、单 App、单 User 三个粒度。
+- **Track 事件分离**：`TrackService` 独立于主事件流，专用于 AG-UI 用户交互（点击、滚动），不进入 LLM 上下文。
+
+### 多后端架构
+
+#### 后端特性矩阵
+
+| 特性 | Memory | SQLite | Redis | PostgreSQL | MySQL | ClickHouse |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| **持久化** | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **分布式** | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| **TTL 原生** | ❌ | ❌ | ✅ (key expiry) | ❌ | ❌ | ✅ (TTL engine) |
+| **复杂查询** | ❌ | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **语义召回** | ❌ | ❌ | ❌ | ✅(PGVector) | ❌ | ❌ |
+| **软删除** | ❌ | ✅ | ❌ | ✅ | ✅ | ❌ |
+| **事件分页** | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| **TrackService** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **单表部署** | — | ✅ | ✅ | ✅ | ✅ | 集群 |
+
+> 加上 `noop`（无状态占位）与 `tdsql`（分布式分片）共 9 种，其中 `pgvector` 额外实现 `SearchableService` 提供跨会话语义召回。
+
+#### TTL 实现差异
+
+| 后端 | 实现机制 | 清理策略 |
+|------|---------|---------|
+| Memory | goroutine 定时扫描 | 扫描 + 访问时检查 |
+| SQLite | goroutine 定时扫描 | 定时 DELETE |
+| Redis | `EXPIRE` 命令 | 原生惰性 + 定期 |
+| PostgreSQL | goroutine 定时扫描 | 定时 DELETE（支持软删除） |
+| MySQL | goroutine 定时扫描 | 定时 DELETE（支持软删除） |
+| ClickHouse | 应用层 TTL 标记 | 原生 TTL + 合并引擎 |
+
+**关键规则**：TTL 仅在**写操作**时刷新（`CreateSession` / `AppendEvent` / `UpdateSessionState`），读操作不刷新——防止频繁读取导致永不清理。
+
+#### 选型决策树
+
+```
+需要持久化？
+├── 否 → Memory（开发/测试）
+└── 是
+    ├── 单机部署？ → SQLite（最简单的持久化方案）
+    └── 分布式部署？
+        ├── 已有 Redis → Redis（最简单，无复杂查询）
+        ├── 需要语义召回 → PGVector
+        ├── 海量日志分析 → ClickHouse
+        └── 通用生产 → PostgreSQL / MySQL
+```
+
+### 设计哲学
+
+**为什么 Session 独立于 Memory？** Session 承载单次会话的**短期**上下文（事件历史、临时 State），Memory 承载跨会话的**长期**信息（用户画像）。两者职责正交、生命周期独立，便于独立选型与扩展。
+
+**为什么不用 append-only 日志？** Agent 场景有三个特殊需求：① 每次调用都要全量读历史；② TTL 需物理淘汰旧事件；③ 摘要需把旧事件替换为压缩文本。append-only 日志（如 Kafka 分区）难以高效满足，故选择「事件数组 + 写入时裁剪」。
+
+**为什么 Track 与 Event 分离？** AG-UI 的用户交互事件（点击、滚动）语义与对话无关，混入会污染 LLM 上下文。独立 `TrackService` 保证主事件流纯净。
+
+**StateMap 为何牺牲类型安全换 `[]byte`？** 换取跨后端 + 跨语言兼容，调用方掌控序列化方式，框架不假设数据格式——这是「最小耦合」原则的体现。
+
+### 配置速查
+
+#### SessionServiceConfig（通用，跨后端）
+
+| 字段 | 类型 | 作用 | 典型子示例 |
+|------|------|------|-----------|
+| `EventLimit` | int | 滑动窗口，保留最近 N 事件 | eventlimit / simple / persona |
+| `TTL` | time.Duration | 整体过期时间 | ttl / simple / persona |
+| `AppendEventHooks` | []AppendEventHook | 写入拦截器（洋葱模型） | hook |
+| `GetSessionHooks` | []GetSessionHook | 读取拦截器 | hook |
+| `EnableTracing` | bool | 链路追踪（仅 redis 子示例启用） | simple |
+
+#### 后端 functional options
+
+| 后端 | 关键 option | 用途 |
+|------|------------|------|
+| postgres | `WithPostgresClientDSN(dsn)` | DSN 连接串 |
+| postgres | `WithTablePrefix("agent_")` | 表名前缀，多租户隔离 |
+| postgres | `WithSessionEventLimit(1000)` | 每会话事件上限 |
+| postgres | `WithSessionTTL(24*time.Hour)` | TTL |
+| postgres | `WithSoftDelete(true)` | 软删除便于恢复 |
+| pgvector | `WithPostgresClientDSN(dsn)` | DSN |
+| pgvector | `WithEmbedder(embedder)` | 嵌入模型（语义召回必备） |
+
+#### 摘要（summary）配置
+
+| Option | 作用 |
+|--------|------|
+| `WithChecksAny(...)` | 任一条件满足即触发 |
+| `CheckEventThreshold(20)` | 事件数阈值（控存储压力） |
+| `CheckTokenThreshold(4000)` | Token 阈值（控上下文窗口） |
+| `CheckTimeThreshold(5*time.Minute)` | 时间阈值（防摘要陈旧） |
+| `WithMaxSummaryWords(200)` | 摘要最大字数 |
+
+> 在 Agent 侧启用：`llmagent.WithAddSessionSummary(true)` 注入摘要到 prompt；`llmagent.WithPreloadSessionRecall(true)` + `WithPreloadSessionRecallLimit(5)` 预加载跨会话语义召回结果。
+
 ## 学习路径建议
 
 1. **先读 [`simple`](./session-simple.md)**：理解 `Runner + SessionService` 接线和三元组隔离，这是所有子示例的基础

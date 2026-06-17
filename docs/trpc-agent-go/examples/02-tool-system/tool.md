@@ -116,6 +116,274 @@ cd examples/tool/webfetch/httpfetch   && go run .
 cd examples/tool/webfetch/geminifetch && go run . -gemini-model gemini-2.5-flash
 ```
 
+## 深度原理
+
+> 本节源自原「核心组件」深度文（05-tool.md + 06-tool-advanced.md），整合接口源码、设计哲学与配置速查。
+
+### Tool 核心接口
+
+#### 接口层次
+
+```go
+// tool/tool.go
+type Tool interface {
+    Declaration() *Declaration
+}
+
+type CallableTool interface {
+    Call(ctx context.Context, jsonArgs []byte) (any, error)
+    Tool
+}
+
+type StreamableTool interface {
+    StreamableCall(ctx context.Context, jsonArgs []byte) (*StreamReader, error)
+    Tool
+}
+
+type ToolSet interface {
+    Tools(context.Context) []tool.Tool
+    Close() error
+    Name() string
+}
+```
+
+四层抽象的语义边界：
+
+| 接口 | 角色 | 何时使用 |
+|------|------|---------|
+| `Tool` | 抽象基类 | 只声明"我是做什么的"（元数据），LLM 调用前可见 |
+| `CallableTool` | 同步调用 | 一次性 API 请求 |
+| `StreamableTool` | 流式调用 | LLM 可渐进消费结果（如日志查询） |
+| `ToolSet` | 批量管理 | 一组工具共享生命周期（如 MCP 连接） |
+
+#### Declaration 元数据
+
+```go
+type Declaration struct {
+    Name         string   // 工具名——LLM 用于 Function Calling 的参数
+    Description  string   // 工具描述——LLM 据此决定是否调用
+    InputSchema  *Schema  // 入参 JSON Schema
+    OutputSchema *Schema  // 出参 JSON Schema（可选）
+}
+```
+
+> **最重要的设计原则**：Name 和 Description 的准确性直接决定工具调用精度。模糊的描述 → LLM 调用错误率显著上升。
+
+#### FunctionTool 的 Schema 自动生成
+
+`function.NewFunctionTool[I, O any]` 使用反射从 Go struct 生成 JSON Schema，省去手写声明：
+
+```go
+type MyInput struct {
+    Name    string   `json:"name" jsonschema:"description=用户名,required"`
+    Age     int      `json:"age" jsonschema:"description=年龄,minimum=0,maximum=150"`
+    Tags    []string `json:"tags" jsonschema:"description=标签列表"`
+    Enabled bool     `json:"enabled" jsonschema:"description=是否启用"`
+}
+```
+
+**jsonschema tag 支持的关键字**：
+`description`、`required`、`enum`、`minimum`、`maximum`、`minLength`、`maxLength`、`pattern`、`format`、`default`
+
+> 注意：jsonschema tag 以逗号 `,` 分隔，**description 值不能包含逗号**。
+
+### ToolSet 与工具编排
+
+#### ToolSet 生命周期（懒连接）
+
+ToolSet 创建时不建立连接，避免未使用的 MCP 服务白白占用资源。首次 `Tools()` 调用时才连接、列出工具并缓存：
+
+```
+[创建 ToolSet] → [首次 Tools()] → [连接 + Initialize + ListTools] → [缓存]
+                                                                       ↓
+                                                                [Close] → [断开连接]
+```
+
+#### 三种 MCP 传输实现差异
+
+| | STDIO | SSE | Streamable HTTP |
+|----|----|----|----|
+| **底层** | `os/exec` 子进程 | `net/http` + EventSource | `net/http` |
+| **适用** | 本地工具 | 远程工具服务 | 远程 + 复杂认证 |
+| **重连** | 重启子进程 | 重建 SSE 连接 | 重建 HTTP 连接 |
+| **认证** | 无（进程内部） | HTTP Header | HTTP Header / Token |
+| **并发** | 串行（管道特性） | 并发 | 并发 |
+
+**STDIO 的串行限制**：子进程的 stdin/stdout 是单工通道，多个并发工具调用需要加锁排队。SSE 和 Streamable HTTP 无此限制。
+
+#### MCP Broker — 按需发现
+
+Broker 暴露 4 个 LLM 可见工具：`mcp_list_servers` → `mcp_describe_server` → `mcp_connect_server` → `mcp_disconnect_server`，实现渐进式发现——LLM 先看有哪些服务器，再查看特定服务器的工具，最后按需连接。
+
+### 权限与过滤模型
+
+框架在「LLM 看到工具」到「工具真正执行」之间布置了三层控制点，每一层解决不同维度的安全问题：
+
+```
+┌──────────────────────────────────────────┐
+│  Layer 1: ToolFilter（可见性控制）         │
+│  - 决定哪些工具对 LLM 可见                │
+│  - LLM 只能调用 Filter 放行的工具          │
+└──────────────┬───────────────────────────┘
+               ▼
+┌──────────────────────────────────────────┐
+│  Layer 2: ToolPermissionPolicy（权限检查） │
+│  - LLM 请求调用后、执行前检查              │
+│  - 可返回 Allow / Deny / AskPermission    │
+└──────────────┬───────────────────────────┘
+               ▼
+┌──────────────────────────────────────────┐
+│  Layer 3: ToolExecutionFilter（执行拦截）  │
+│  - 标记需要外部执行的工具                 │
+│  - 框架不自动执行，交由调用方处理          │
+└──────────────────────────────────────────┘
+```
+
+#### 三层各自解决的问题
+
+| 控制点 | 解决的问题 | 执行时机 |
+|--------|-----------|---------|
+| `ToolFilter` | 不希望 LLM 知道某些工具存在（防止误用） | LLM 调用前（被过滤的工具不进入 tools 声明，LLM 无从知晓） |
+| `ToolPermissionPolicy` | 已知工具被调用时做权限/合规检查（破坏性操作审批、参数大小限制） | 参数解析后、BeforeTool 回调前 |
+| `ToolExecutionFilter` | 不让框架自动执行，交由调用方处理（如 human-in-the-loop） | 框架执行前 |
+
+#### PermissionDecision 三态语义
+
+```go
+type PermissionDecision int
+const (
+    AllowDecision  PermissionDecision = iota  // 允许执行
+    DenyDecision                               // 拒绝执行
+    AskDecision                                // 需要审批
+)
+```
+
+| 决策 | 行为 | LLM 收到的反馈 |
+|------|------|---------------|
+| `AllowPermission()` | 正常执行工具 | 正常的 tool result |
+| `DenyPermission(reason)` | 跳过执行 | `{"error": "denied", "reason": "..."}` |
+| `AskPermission(reason)` | 跳过执行 | `{"error": "approval_required", "reason": "..."}` |
+
+> 工具如果实现了 `PermissionChecker` 接口，其 Checker 优先于全局 Policy。
+
+#### 并发工具执行
+
+同一轮对话中 LLM 可能返回多个 `tool_calls`。框架默认并行执行它们——只有当工具标记了 `ConcurrencySafe` 时才真正并行，否则串行执行（默认安全）。
+
+### 设计哲学
+
+#### 为什么 arguments 是 JSON 字符串而非结构化对象？
+
+LLM 的 Function Calling 返回的 `function.arguments` 本就是 JSON 字符串。将接口参数设计为 `jsonArgs []byte` 而非已解析结构体的三个原因：
+
+1. **零解析开销传递**：Agent 仅是 MCP 代理时（调用外部 API，不关心参数内容），可原样转发
+2. **延迟解析**：权限检查可在原始 JSON 上执行（如检查参数大小），无需先解析
+3. **容错**：LLM 可能生成非严格 JSON，框架层可以先修复再传递
+
+#### Tool vs ToolSet 的边界
+
+- **Tool** = 一个原子能力（如"计算器"）
+- **ToolSet** = 一组相关能力的容器（如"某个 MCP 服务器提供的所有工具"）
+
+ToolSet 的核心价值在于**生命周期管理**：
+
+- `Close()` 清理连接——MCP client 断开、进程 kill
+- `Tools()` 缓存——避免每次 LLM 调用都重新获取工具列表
+- `Name()` 用于冲突检测和多 ToolSet 合并时的去重
+
+#### 为什么默认重试策略保守？
+
+工具可能产生副作用（写入数据库、发送通知），盲目重试可能导致重复操作。默认 `DefaultRetryOn` 只重试网络层面的瞬时错误：
+
+- 重试：`io.EOF` / `io.ErrUnexpectedEOF` / `net.Error.Timeout()` / `net.Error.Temporary()`
+- 不重试：`nil` error、`context.Canceled`、`context.DeadlineExceeded`
+
+重试范围仅限当前工具调用——不会重跑整个 Agent 或 Graph 流程。
+
+#### Tool Call ID 链路
+
+每次 LLM 工具调用都会携带唯一的 `tool_call_id`，框架在 BeforeTool 回调之前将其注入 `context.Context`：
+
+- **日志关联**：通过 `tool.ToolCallIDFromContext(ctx)` 读取后写入日志，串联同一调用
+- **状态隔离**：并发工具调用时用作 state key 避免互相覆盖
+- **子 Agent 归属**：工具内启动子 Agent 时传递 `parent_tool_call_id`，前端可渲染嵌套调用树（Coordinator → Tool Call 卡片 → Child Agent 输出）
+- **Invocation 关系**：`InvocationID` + `ParentInvocationID` 构建 Agent 执行树
+
+> 注意：如果 BeforeTool 回调创建了新的裸 context（未继承），下游工具代码会丢失 `tool_call_id`。
+
+#### JSON 参数修复
+
+开启 `WithToolCallArgumentsJSONRepairEnabled(true)` 后，框架在 PermissionPolicy 检查**之前**修复 LLM 输出的非严格 JSON：
+
+- 未引号的 object key：`{name: "test"}` → `{"name": "test"}`
+- 尾随逗号：`{"a": 1,}` → `{"a": 1}`
+- 单引号：`{'name': 'test'}` → `{"name": "test"}`
+- 缺失闭合引号（best-effort）
+
+执行时机在 PermissionPolicy 之前，意味着策略检查的是修复后的合法 JSON。
+
+### 配置速查
+
+#### FunctionTool options
+
+| Option | 作用 |
+|--------|------|
+| `function.WithName(s)` | 工具名（LLM 用于 Function Calling） |
+| `function.WithDescription(s)` | 工具描述（LLM 据此决定是否调用） |
+
+构造器：`function.NewFunctionTool[I,O](fn, opts...)` / `function.NewStreamableFunctionTool[I,O](fn, opts...)`
+
+#### LLMAgent Tool 相关 options
+
+| Option | 作用 |
+|--------|------|
+| `llmagent.WithTools([]tool.Tool)` | 注册单一工具 |
+| `llmagent.WithToolSets([]tool.ToolSet)` | 注册工具集（MCP / hostexec 等） |
+| `llmagent.WithToolFilter(fn)` | Agent 级工具过滤 |
+| `llmagent.WithToolCallRetryPolicy(*tool.RetryPolicy)` | 工具调用重试策略 |
+| `llmagent.WithToolPermissionPolicyFunc(fn)` | 运行时权限策略 |
+| `llmagent.WithToolExecutionFilter(fn)` | 执行拦截器（标记 pending） |
+
+#### Runner Run Per-Run options（覆盖 Agent 级别）
+
+| Option | 作用 |
+|--------|------|
+| `agent.WithToolFilter(fn)` | 本次运行的工具过滤 |
+| `agent.WithToolPermissionPolicyFunc(fn)` | 本次运行的权限策略 |
+| `agent.WithToolExecutionFilter(fn)` | 本次运行的执行拦截 |
+| `agent.WithToolCallArgumentsJSONRepairEnabled(true)` | 启用 JSON 参数修复 |
+
+#### RetryPolicy 字段
+
+```go
+type RetryPolicy struct {
+    MaxAttempts     int           // 总尝试次数（含首次）
+    InitialInterval time.Duration // 首次重试前的等待
+    BackoffFactor   float64       // 退避因子（指数增长）
+    MaxInterval     time.Duration // 最大间隔
+    Jitter          bool          // 是否加入随机抖动
+    RetryOn         func(ctx context.Context, info *RetryInfo) (bool, error) // 自定义重试条件
+}
+```
+
+`RetryInfo` 提供 `ToolName`、`Attempt`、`RawError`、`ResultError`（结果级错误）、`Elapsed`，自定义 `RetryOn` 可先调 `tool.DefaultRetryOn` 再叠加业务规则。
+
+#### Graph ToolsNode
+
+```go
+sg.AddToolsNode("tools", tools, graph.WithToolCallRetryPolicy(policy))
+```
+
+#### 内置工具 options 速查
+
+| 工具 | 关键 options |
+|------|--------------|
+| `duckduckgo.NewTool` | `WithBaseURL` / `WithHTTPClient` |
+| `claudecode.NewToolSet` | `WithBaseDir` / `WithReadOnly` / `WithMaxFileSize` |
+| `mcp.NewMCPToolSet` | `ConnectionConfig{Transport, Command, Args, Env, ServerURL, HTTPHeaders, Timeout}` + `WithToolFilterFunc` |
+| `mcp.NewBroker` | `WithBrokerServers` / `WithBrokerAuthHook` |
+| `todo.New()` | 软约束直接用；硬约束配 `todoenforcer.New()` extension |
+
 ## 学习路径建议
 
 1. **先读 [`codeexec`](./tool-codeexec.md)**：理解最基础的 "Tool 定义 + WithTools 注册 + 事件三段式分发" 模式，这是所有工具示例的骨架

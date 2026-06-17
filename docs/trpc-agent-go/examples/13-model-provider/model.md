@@ -124,6 +124,117 @@ OpenAI SDK 自动读取这两个环境变量，**无需手动配置客户端**�
 
 切换 DeepSeek 时只需改 `OPENAI_BASE_URL=https://api.deepseek.com/v1`；多提供商场景（如 [`failover`](./model-failover.md)）则用代码里的 `openai.WithBaseURL` 显式指定，并配独立的 `*_API_KEY`。
 
+## 深度原理
+
+> 本节源自原「核心组件」深度文（04-model.md），提炼 Model 层的接口契约、流式机制与设计考量；各可靠性策略（retry/failover/hedge/switch/selector/promptmap/batch）的具体实现代码见对应子示例详解。
+
+### Model 核心接口
+
+Model 层的根基是两个接口加一个回调式序列类型：
+
+```go
+// model/model.go
+type Model interface {
+    GenerateContent(ctx context.Context, request *Request) (<-chan *Response, error)
+    Info() Info
+}
+
+// model/iter_model.go — 可选迭代器优化
+type IterModel interface {
+    Model
+    GenerateContentIter(ctx context.Context, request *Request) (Seq[*Response], error)
+}
+
+// Seq 是回调式序列 —— 同步推送，避免 goroutine+channel 开销
+type Seq[T any] func(yield func(T) bool)
+```
+
+`GenerateContent` 统一返回 `<-chan *Response`，使流式与非流式、原始模型与包装器对外形态完全一致。`IterModel` 是可选优化接口，框架自动检测并优先使用，规避高频流式下 goroutine+channel 的开销。
+
+**GenerationConfig**（请求侧生成参数，均为指针类型——传 `nil` 表示不覆盖服务端默认值）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `Stream` | bool | 流式输出（默认 false） |
+| `Temperature` | *float64 | 0.0-2.0 |
+| `MaxTokens` | *int | 最大输出 token |
+| `TopP` | *float64 | 核采样 |
+| `Stop` | []string | 停止词 |
+| `FrequencyPenalty` | *float64 | 频率惩罚 |
+| `PresencePenalty` | *float64 | 存在惩罚 |
+| `ReasoningEffort` | *string | 推理努力程度 |
+| `ThinkingEnabled` | *bool | 启用思维模式 |
+| `ThinkingTokens` | *int | 思维 token 限制 |
+
+### 消息与流式设计
+
+同一接口下存在两种流式实现，框架按场景自动择优：
+
+| | Channel 流式 (`GenerateContent`) | 迭代器流式 (`GenerateContentIter`) |
+|----|----|----|
+| **实现** | `go func() { for... { ch <- chunk } }()` | 同步 `yield(chunk)` |
+| **开销** | goroutine + channel 同步 | 零分配回调 |
+| **适用** | 一般场景 | 高频流式（每 token 一个 chunk） |
+| **优先级** | 默认 | 框架自动检测 IterModel 接口优先使用 |
+
+流式回调按生命周期分 4 个注入点，覆盖请求全过程：
+
+```
+请求前：WithChatRequestCallback        → 可修改 params
+流式：  WithChatChunkCallback          → 每个 chunk 触发（每 token 一次）
+非流式：WithChatResponseCallback       → 完整响应到达
+完成：  WithChatStreamCompleteCallback → 流结束（含 accumulator）
+```
+
+其中 `WithChatStreamCompleteCallback` 携带的 Accumulator 会拼接所有 chunk，输出完整的 `content` 与 `tool_calls`——这是流式模式下获取整体视图的唯一途径。
+
+### 包装器模式
+
+retry / failover / hedge / switch / selector / promptmap 等策略之所以能"上层无感"地叠加，关键在于它们**都实现了同一个 `model.Model` 接口**——这是经典的装饰器（Decorator）模式：包装器持有底层 `model.Model`，对外暴露相同的 `GenerateContent` 签名，在调用前后插入重试、故障转移、对冲或路由逻辑。由此带来两个工程红利：
+
+- **可任意嵌套**：`hedge(failover(retry(primary)))` 这类组合天然成立，每层只依赖接口而非具体实现。
+- **零侵入替换**：任何包装器接入 `LLMAgent` + `Runner` 后，上层代码无需改动一行。
+
+平台差异则由 **Variant 策略**吸收：不同供应商（OpenAI / DeepSeek / 混元）的 API 差异点有限（约 5–10 处），框架用枚举 + `switch` 在请求出海前做字段映射（如 DeepSeek 不支持 `Temperature=0` 自动改为 `1e-6`），而非为每个平台派生接口子类。差异点稀少时，这种取舍比多态更简单直接。
+
+### 设计哲学
+
+**为什么不把 Token 计数放进 Model 接口？** Token 计数与平台强相关（OpenAI 用 tiktoken，Anthropic 用 claude-tokenizer），甚至与模型版本相关；强行进接口会破坏抽象。框架采用"可选能力"模式：`SimpleTokenCounter` 给出近似估算（1 token ≈ 4 chars），各 Model 实现可提供更精确的计数，Token Tailoring 接受 `Counter` 接口可任意替换。裁剪对应三档策略——`Head`（保前 N，适合 system prompt 为主）、`Tail`（保后 N，适合最新对话为主）、`MiddleOut`（保头尾裁中间，平衡历史与最新，推荐）。
+
+**适配器模式的边界**：将不同厂商 API 封装为同一 `model.Model` 接口，Agent 完全不必关心底层是 OpenAI 还是 Anthropic——但这层只做"协议翻译"，不做"能力对齐"。
+
+**ReasoningEffort 的跨平台适配**也由 Variant 层吸收，Agent 代码无需关心映射细节：
+
+| ReasoningEffort | OpenAI o-series | DeepSeek v4 | Anthropic |
+|-----------------|-----------------|-------------|-----------|
+| `"low"` | 最少推理 token | 映射为 `"high"` | 最少 thinking |
+| `"medium"` | 中等 | 映射为 `"high"` | 中等 |
+| `"high"` | 较多推理 | 原生支持 | 较多 thinking |
+| `"max"` | 最多推理 | 原生支持 | 最多 thinking |
+| `"xhigh"` | — | 映射为 `"max"` | 仅支持机型 |
+
+### 配置速查
+
+**OpenAI 适配器 functional options**（客户端构造侧）：
+
+| 选项 | 说明 |
+|------|------|
+| `openai.New(name, opts...)` | 创建实例，name 为实际模型名 |
+| `WithBaseURL(url)` | 自定义 API 地址 |
+| `WithAPIKey(key)` | API 密钥 |
+| `WithVariant(v)` | 平台适配（DeepSeek/混元） |
+| `WithExtraFields(m)` | 附加 JSON 字段 |
+| `WithHeaders(m)` | 固定 HTTP Header |
+| `WithRetryPolicy(p)` | 自动重试配置 |
+| `WithChatRequestCallback(f)` | 请求前回调 |
+| `WithChatResponseCallback(f)` | 非流式回调 |
+| `WithChatChunkCallback(f)` | 流式 chunk 回调 |
+| `WithChatStreamCompleteCallback(f)` | 流式完成回调 |
+| `WithEnableTokenTailoring(b)` | 启用 Token 裁剪 |
+| `WithTokenTailoringConfig(c)` | 裁剪策略配置 |
+
+> 请求侧生成参数见上文「Model 核心接口」的 GenerationConfig 表。
+
 ## 学习路径建议
 
 1. **先读 [`retry`](./model-retry.md)**：理解最轻量的可靠性策略，建立"SDK 自动重试"的直觉

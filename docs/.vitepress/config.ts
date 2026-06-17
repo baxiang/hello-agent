@@ -533,43 +533,6 @@ export default withMermaid({
           ]
         },
         {
-          text: '核心组件',
-          items: [
-            { text: 'Agent 系统', link: '/trpc-agent-go/01-agent' },
-            { text: 'Multi-Agent 编排', link: '/trpc-agent-go/02-agent-types' },
-            { text: 'Runner 执行器', link: '/trpc-agent-go/03-runner' },
-            { text: 'Model 模型层', link: '/trpc-agent-go/04-model' },
-            { text: 'Tool 工具系统', link: '/trpc-agent-go/05-tool' },
-            { text: '工具进阶', link: '/trpc-agent-go/06-tool-advanced' },
-            { text: 'Session 会话', link: '/trpc-agent-go/07-session' },
-            { text: 'Memory 记忆', link: '/trpc-agent-go/08-memory' },
-            { text: 'Knowledge RAG', link: '/trpc-agent-go/09-knowledge' },
-          ]
-        },
-        {
-          text: '图工作流',
-          items: [
-            { text: 'Graph Agent（上）', link: '/trpc-agent-go/10-graph' },
-            { text: 'Graph Agent（下）', link: '/trpc-agent-go/11-graph-advanced' },
-          ]
-        },
-        {
-          text: '部署与生态',
-          items: [
-            { text: 'Server 与协议', link: '/trpc-agent-go/12-server' },
-            { text: '可观测性', link: '/trpc-agent-go/13-observability' },
-            { text: '生态与进阶', link: '/trpc-agent-go/14-ecosystem' },
-          ]
-        },
-        {
-          text: '协议深度',
-          items: [
-            { text: 'MCP 协议', link: '/trpc-agent-go/15-mcp' },
-            { text: 'AG-UI 协议', link: '/trpc-agent-go/16-agui' },
-            { text: 'A2A 协议', link: '/trpc-agent-go/17-a2a' },
-          ]
-        },
-        {
           text: '示例教程',
           link: '/trpc-agent-go/examples/',
           items: [
@@ -577,6 +540,7 @@ export default withMermaid({
               text: '01 - Agent 基础',
               collapsed: true,
               items: [
+                { text: 'Agent 基础（原理索引）', link: '/trpc-agent-go/examples/01-agent-basics/' },
                 { text: 'LLM Agent 入门', link: '/trpc-agent-go/examples/01-agent-basics/llmagent' },
                 { text: '自定义 Agent', link: '/trpc-agent-go/examples/01-agent-basics/customagent' },
                 { text: '调试 Agent', link: '/trpc-agent-go/examples/01-agent-basics/debugagent' },
@@ -688,6 +652,7 @@ export default withMermaid({
               text: '09 - A2A 协议',
               collapsed: true,
               items: [
+                { text: 'A2A 协议（原理索引）', link: '/trpc-agent-go/examples/09-a2a-protocol/' },
                 { text: 'A2A ADK', link: '/trpc-agent-go/examples/09-a2a-protocol/a2aadk' },
                 { text: 'A2A Agent', link: '/trpc-agent-go/examples/09-a2a-protocol/a2aagent' },
                 { text: 'A2A 代码执行', link: '/trpc-agent-go/examples/09-a2a-protocol/a2acodeexecution' },
@@ -699,6 +664,7 @@ export default withMermaid({
               text: '10 - AG-UI 协议',
               collapsed: true,
               items: [
+                { text: 'AG-UI 协议（原理索引）', link: '/trpc-agent-go/examples/10-agui-protocol/' },
                 { text: 'A2UI 协议', link: '/trpc-agent-go/examples/10-agui-protocol/a2ui' },
                 { text: 'AG-UI 协议', link: '/trpc-agent-go/examples/10-agui-protocol/agui' },
               ]

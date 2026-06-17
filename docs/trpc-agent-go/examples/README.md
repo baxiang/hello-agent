@@ -318,3 +318,84 @@
 | `taskrun` | [任务运行](19-advanced-features/taskrun.md) | 任务模式运行 |
 | `todo` | [Todo](19-advanced-features/todo.md) | Todo 示例 |
 | `artifact` | [Artifact](19-advanced-features/artifact.md) | 制品管理 |
+
+---
+
+## 协议服务端总览
+
+> 本节源自原「核心组件」深度文（12-server.md），整合 Server 架构与三协议服务端设计。具体实操示例见 `09-a2a-protocol/`、`10-agui-protocol/`、`03-mcp-tools/` 下的子文章。
+
+### Server 架构
+
+Server 是 Agent 对外的部署入口，通过 Runner 承载 Agent，并将执行过程以 SSE 流式响应推送出去。
+
+```
+HTTP Request
+    │
+    ▼
+Gateway Handler
+    │
+    ├─ 路由匹配
+    ├─ 会话管理（Session Service）
+    ├─ 调用 Runner.Run()
+    ├─ SSE 流式推送（实时）
+    └─ 错误转换与返回
+```
+
+**关键设计**：
+
+- **Runner 承载 Agent**：Server 不直接持有 Agent，而是通过 `WithRunner(r)` 注入 Runner，由 Runner 驱动 Agent 执行。
+- **SSE 流式推送**：Agent 的执行过程（文本增量、工具调用、工具结果）以 Server-Sent Events 实时推送到客户端，无需轮询。
+- **会话管理**：内置 Session Service 负责多会话切换与历史维护。
+- **OpenClaw 安全运行时**：在基础网关之上叠加安全控制：
+  - **Allowlist**：白名单用户才能使用
+  - **Mention Gating**：群聊中需要 @机器人 才回复
+  - **Stable Session IDs**：跨重启的稳定会话标识
+  - **Per-Session 序列化**：同一会话串行处理，避免竞态
+
+### 三协议服务端对比
+
+| 协议 | 适用场景 | 传输方式 | 状态管理 |
+|------|---------|---------|---------|
+| **AG-UI** | Agent-to-User 实时前端交互 | HTTP + SSE | 会话历史快照 + 取消 |
+| **A2A** | Agent-to-Agent 跨框架互操作 | HTTP POST + SSE | Task 模型 + 任务 ID |
+| **MCP** | Agent-to-Tool 工具能力暴露 | stdio / SSE / Streamable HTTP | 无状态工具调用 |
+
+**AG-UI（Agent-User Interaction）**：基于 SSE 的实时交互协议，三大路由 `/agui/chat`、`/agui/history`、`/agui/cancel`。SSE 事件类型覆盖 `text_message_content`、`tool_call`、`tool_result`、`run_finished`，兼容 CopilotKit 与 TDesign Chat 前端。Graph 节点的 EventEmitter 事件可经 Translator 自动转换为 AG-UI 协议事件。
+
+**A2A（Agent-to-Agent）**：Google 提出的跨框架 Agent 互操作标准。以 Task 为核心模型（task_id + message + context），通过 HTTP POST `/tasks` 发起，SSE 流式推送结果。支持跨语言互调，远程 Agent 可当作本地 Agent 使用，独立部署、强解耦。
+
+**MCP（Model Context Protocol）**：将工具能力标准化暴露给 Agent 消费。服务端有三种传输模式：stdio（子进程通信，最简）、SSE（HTTP + 信号优雅退出）、Streamable HTTP（现代写法，struct-first + OutputSchema）。
+
+### 协议选择建议
+
+| 需求 | 推荐协议 | 理由 |
+|------|---------|------|
+| 前端实时聊天交互 | AG-UI | SSE 事件流，原生兼容 CopilotKit/TDesign |
+| 跨框架/跨语言 Agent 互调 | A2A | 标准协议，独立部署，强解耦 |
+| 暴露工具能力给 Agent | MCP | stdio 本地 / SSE 远程 / streamable 现代三档可选 |
+| 通用 HTTP 网关部署 | Gateway | 最简部署，内置 Session + SSE |
+
+> A2A 与 AgentTool 的取舍：A2A 走 HTTP/SSE 远程调用，跨语言、强解耦但有网络延迟；AgentTool 走进程内调用，低延迟但仅限 Go 同进程。
+
+### 配置速查
+
+**Server 构造选项**：
+
+| Server 类型 | 关键配置项 | 说明 |
+|------------|-----------|------|
+| Gateway | `WithRunner` / `WithPort` / `WithHost` | 基础 HTTP 网关 |
+| OpenClaw | `WithSessionStore` / `WithAllowlist` / `WithMentionGating` | 安全运行时 |
+| AG-UI | `WithRunner` / `WithPort` / `WithPath` | AG-UI 服务 |
+| A2A（客户端） | `WithA2AClient` / `WithStreaming` | 将远程 A2A Agent 当本地用 |
+
+**生产部署清单**：
+
+| 维度 | 生产配置 | 开发默认 |
+|------|---------|---------|
+| Session 持久化 | Redis / PostgreSQL | Memory |
+| Memory 持久化 | Redis / PostgreSQL / PGVector | Memory |
+| 可观测性 | OTel SDK → Collector → Jaeger/Prometheus | 关 |
+| 安全 | ToolPermissionPolicy / MaxLLMCalls / MaxToolIterations / Allowlist / Mention Gating | 关 |
+| 日志 | 结构化日志 + spanID 关联 | 标准输出 |
+| 健康检查 | `/health` endpoint + 就绪探针 | 无 |
