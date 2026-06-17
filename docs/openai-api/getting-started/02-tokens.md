@@ -113,14 +113,3 @@ curl https://api.openai.com/v1/chat/completions \
 1. **中英对比**：发两段意思相同的话，一段纯英文（如 "I like cats"）、一段纯中文（如 "我喜欢猫"），对比返回的 `prompt_tokens` 差异。你会直观看到中文更贵。
 2. **截断实验**：问一个长问题（如"详细介绍太阳系"），设 `max_tokens: 10`，看回答被生硬截断、`finish_reason` 变成 `length`。
 
-## 下一节预告
-
-你已经会调、会组织对话、会算账了。但模型每次回答都不一样——有时太死板（写代码总一个样）、有时太天马行空（胡编乱造）。怎么精确控制它？
-
-下一节介绍 5 个最常用参数：[5 个最常用参数](./03-core-params.md)。
-
-## 进阶篇会深入讲什么
-
-本节只讲了 token 基础。进阶篇会展开：
-
-- [参数全解](../06-parameters.md) —— `usage` 的子字段（`prompt_tokens_details`、`completion_tokens_details`）、`reasoning_tokens`（推理模型额外消耗的 token）、context window 详解

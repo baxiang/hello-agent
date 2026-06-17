@@ -134,14 +134,3 @@ curl https://api.openai.com/v1/chat/completions \
 2. **完整实验**：带上全部 3 条历史再发，看模型准确答出关于猫的内容。
 3. **人设实验**：在 messages 最前面加一条 `system`："你是古文大师，所有回答用文言文"，再问"今天天气怎么样"，看风格变化。
 
-## 下一节预告
-
-你可能会发现：对话越长，请求体越大，账单越贵。为什么？因为大模型按 **token** 计费，而你的 `messages` 越长，token 越多。
-
-下一节讲清楚 token 到底是什么、怎么影响你的费用和速度：[Token：大模型的「计费单位」](./02-tokens.md)。
-
-## 进阶篇会深入讲什么
-
-本节只讲了三种基本角色。其实 `messages` 还支持另外两种角色（`developer`、`tool`），还有多模态内容格式、严格的消息顺序规则。去看进阶篇：
-
-- [Messages 消息系统](../01-messages.md) —— 五种 Role 全解（system/developer/user/assistant/tool）、`content` 的多模态格式、消息顺序规则

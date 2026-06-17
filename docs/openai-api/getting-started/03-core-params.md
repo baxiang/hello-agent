@@ -166,12 +166,3 @@ curl https://api.openai.com/v1/chat/completions \
 
 你已经具备独立用 OpenAI API 做大部分事情的能力了。
 
-## 接下来去哪
-
-入门只是开始。想更深入，按兴趣去进阶篇：
-
-- 想理解流式输出（像 ChatGPT 那样逐字出现）→ [流式协议 (SSE)](../03-streaming.md)
-- 想让模型调用工具（搜索、计算、查天气）→ [Function Calling 机制](../04-function-calling.md)
-- 想传图片、音频给模型 → [多模态输入与输出](../05-multimodal.md)
-- 想看全部参数（不止这 5 个）→ [参数全解](../06-parameters.md)
-- 想换国产模型省成本 → [DeepSeek V3/V4](../07-deepseek.md) 起的工程实践系列
