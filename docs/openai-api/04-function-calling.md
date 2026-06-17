@@ -34,16 +34,16 @@ Function Calling 让 LLM 输出结构化的函数调用请求——客户端执�
 sequenceDiagram
     participant U as 用户代码
     participant API as OpenAI API
-    participant T as 工具（你的代码）
+    participant T as 工具
 
-    U->>API: POST /v1/chat/completions<br/>messages=[user] + tools=[get_weather]
-    Note over API: 模型决定调用 get_weather("Tokyo")
-    API-->>U: choices[0].finish_reason="tool_calls"<br/>tool_calls=[{id, name, arguments}]
-    U->>T: 执行 get_weather(city="Tokyo")
-    T-->>U: {"temp":22,"cond":"sunny"}
-    U->>API: POST /v1/chat/completions<br/>messages=[user, assistant(tool_calls), tool(result)]
+    U->>API: 第 1 次 POST（messages 含 user + tools 声明）
+    Note over API: 模型决定调用 get_weather(city=Tokyo)
+    API-->>U: finish_reason=tool_calls，返回 tool_calls 数组
+    U->>T: 执行 get_weather，参数 city=Tokyo
+    T-->>U: 返回 温度=22, 天气=晴天
+    U->>API: 第 2 次 POST（messages 追加 assistant + tool 结果）
     Note over API: 模型读到结果，组织自然语言
-    API-->>U: choices[0].finish_reason="stop"<br/>content="东京现在 22°C，晴天"
+    API-->>U: finish_reason=stop，返回 最终文字回答
 ```
 
 ::: tip 看图记住三点
