@@ -23,7 +23,7 @@
 | 00 | [第一次调用：5 分钟跑通](./getting-started/00-first-call.md) | 最简 curl 请求逐行拆解、响应字段解读、3 个常见错误 |
 | 01 | [messages 数组](./getting-started/01-messages-intro.md) | 聊天记录比喻、system/user/assistant 三角色、多轮对话 |
 | 02 | [Token 计费单位](./getting-started/02-tokens.md) | token 是什么、usage 字段、与费用/速度/上限的关系 |
-| 03 | [5 个最常用参数](./getting-started/03-core-params.md) | temperature、max_tokens、top_p、stop、n |
+| 03 | [常用参数详解](./getting-started/03-core-params.md) | temperature、max_tokens、top_p、stop、n、stream、seed、response_format、penalty |
 
 ### 协议进阶
 

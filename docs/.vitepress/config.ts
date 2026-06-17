@@ -223,7 +223,7 @@ export default withMermaid({
             { text: '第一次调用：5 分钟跑通', link: '/openai-api/getting-started/00-first-call' },
             { text: 'messages 数组', link: '/openai-api/getting-started/01-messages-intro' },
             { text: 'Token 计费单位', link: '/openai-api/getting-started/02-tokens' },
-            { text: '5 个最常用参数', link: '/openai-api/getting-started/03-core-params' },
+            { text: '常用参数详解', link: '/openai-api/getting-started/03-core-params' },
           ]
         },
         {
