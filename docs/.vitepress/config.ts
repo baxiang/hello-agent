@@ -432,9 +432,16 @@ export default withMermaid({
       ],
       '/a2a/': [
         {
-          text: 'A2A 协议',
+          text: '入门基础',
           items: [
-            { text: '从零理解 A2A', link: '/a2a/00-a2a-from-zero' },
+            { text: '什么是 A2A', link: '/a2a/getting-started/00-what-is-a2a' },
+            { text: '第一次调用 A2A', link: '/a2a/getting-started/01-first-call' },
+          ]
+        },
+        {
+          text: '协议详解',
+          items: [
+            { text: '协议总览', link: '/a2a/00-a2a-from-zero' },
             { text: 'Agent 发现与名片', link: '/a2a/01-agent-discovery-card' },
             { text: '消息与任务模型', link: '/a2a/02-message-task-model' },
             { text: '协议方法', link: '/a2a/03-protocol-methods' },
