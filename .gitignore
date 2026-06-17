@@ -1,0 +1,9 @@
+# 第三方框架源码（独立 git 仓库 clone，不纳入主仓库）
+/trpc-agent-go/
+/agentscope-java/src/
+
+# 本地临时 / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
