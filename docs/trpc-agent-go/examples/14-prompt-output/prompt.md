@@ -10,7 +10,7 @@
 
 `prompt.Source` 是框架定义的 Prompt 来源接口，`promptlangfuse` 包提供了与 Langfuse 平台集成的实现。通过 `FetchPrompt()` 获取远程模板，再通过 `text.Render()` 填充变量，最后调用 `agent.SetInstruction()` 动态更新 Agent 指令。关键特性包括：
 
-- **模板变量渲染**：支持 `{{criticlevel}}`、`{{movie}}` 等变量占位符
+- **模板变量渲染**：支持 <code v-pre>{{criticlevel}}</code>、<code v-pre>{{movie}}</code> 等变量占位符
 - **本地缓存**：通过 `WithCacheTTL` 控制缓存过期时间，减少网络调用
 - **版本与标签**：支持按 `label`（如 production）筛选特定版本的 Prompt
 
@@ -48,7 +48,7 @@ rendered, err := text.Render(prompt.RenderEnv{
 })
 ```
 
-从 Langfuse 拉取模板文本，将 `{{criticlevel}}` 和 `{{movie}}` 替换为实际值。
+从 Langfuse 拉取模板文本，将 <code v-pre>{{criticlevel}}</code> 和 <code v-pre>{{movie}}</code> 替换为实际值。
 
 **3. 动态更新 Agent 指令**
 

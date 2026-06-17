@@ -225,7 +225,7 @@ You are a strict code reviewer. Point out risks first.
 | 持久化 | 否 | 是（随 `session.State`） |
 | 适合场景 | 单一角色产品 | 多角色、多租户 |
 
-> 进阶：需要 State 占位符插值（如 `{{user.name}}`）时，可在 `buildPersonaInstruction` 里加模板渲染；本示例刻意保持极简。
+> 进阶：需要 State 占位符插值（如 <code v-pre>{{user.name}}</code>）时，可在 `buildPersonaInstruction` 里加模板渲染；本示例刻意保持极简。
 
 ## 关键要点
 

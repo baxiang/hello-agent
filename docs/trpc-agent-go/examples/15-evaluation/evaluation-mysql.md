@@ -25,12 +25,12 @@ evalResultManager, err := evalresultmysql.New(/* 同样的三个 Option */)
 
 ### 表结构（带前缀）
 
-| 表名（`{{PREFIX}}` = `-table-prefix`） | 作用 |
+| 表名（<code v-pre>{{PREFIX}}</code> = `-table-prefix`） | 作用 |
 |------|------|
-| `{{PREFIX}}evaluation_eval_sets` | EvalSet 元信息（app_name + eval_set_id 唯一） |
-| `{{PREFIX}}evaluation_eval_cases` | 单个 EvalCase，`eval_case` 字段为 JSON |
-| `{{PREFIX}}evaluation_metrics` | Metric 定义，`metric` 字段为 JSON |
-| `{{PREFIX}}evaluation_eval_set_results` | 评测结果，`eval_case_results` / `summary` 为 JSON |
+| <code v-pre>{{PREFIX}}evaluation_eval_sets</code> | EvalSet 元信息（app_name + eval_set_id 唯一） |
+| <code v-pre>{{PREFIX}}evaluation_eval_cases</code> | 单个 EvalCase，`eval_case` 字段为 JSON |
+| <code v-pre>{{PREFIX}}evaluation_metrics</code> | Metric 定义，`metric` 字段为 JSON |
+| <code v-pre>{{PREFIX}}evaluation_eval_set_results</code> | 评测结果，`eval_case_results` / `summary` 为 JSON |
 
 表定义与官方 schema 一致：
 - `evaluation/evalset/mysql/schema.sql`
