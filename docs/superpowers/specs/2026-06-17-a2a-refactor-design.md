@@ -109,3 +109,26 @@ docs/a2a/
 - 不引入 Python/Go SDK 示例（curl + JSON 够入门）
 - 不加交互式 playground
 - 不动 `openai-api/` 章节（已完成）
+
+## ⚠️ 关键约束：v1.0 规范事实纠正
+
+经核实，**现有 6 篇文档大量使用 v0.x 旧规范**，与当前 v1.0 规范有多处重大出入。教学化改造**必须同时做事实纠正**，否则文档越改越错。主要差异：
+
+| 维度 | 现有文档（v0.x 旧） | v1.0 正确 |
+|------|---------------------|-----------|
+| 角色术语 | Client Agent / Remote Agent | **A2A Client / A2A Server（Remote Agent）** |
+| Agent Card 路径 | `/.well-known/agent.json` | **`/.well-known/agent-card.json`** |
+| Card 顶层字段 | `url` 在顶层 | **`supportedInterfaces[].url`** |
+| capabilities 字段 | 含 `stateTransitionHistory` | **仅 streaming / pushNotifications / extensions / extendedAgentCard** |
+| Part 类型 | `kind: text/file/data` 区分 | **单一 Part，OneOf text / raw / url / data**（v1.0 移除 kind discriminator） |
+| Message.role 值 | `user` / `agent` | **`ROLE_USER` / `ROLE_AGENT`** |
+| Task 状态值 | `submitted` / `working` / ... | **`TASK_STATE_SUBMITTED` / `TASK_STATE_WORKING` / ...**（含 REJECTED、AUTH_REQUIRED） |
+| JSON-RPC 方法名 | `message/send` / `message/stream` / `tasks/get` / `tasks/cancel` | **PascalCase：`SendMessage` / `SendStreamingMessage` / `GetTask` / `ListTasks`（新）/ `CancelTask` / `SubscribeToTask` / `CreateTaskPushNotificationConfig` 等** |
+| 传输绑定 | 仅 HTTP+JSON-RPC + SSE | **gRPC + JSON-RPC + HTTP/REST + 自定义绑定**（SSE 是其中流式机制） |
+
+**改造原则**：
+- 现有 6 篇在加三件套的同时，**逐篇纠正上述旧规范**为新版
+- 入门 2 篇直接用 v1.0 正确写法
+- 保留现有文档的整体结构和讲解思路，只替换过时的方法名/字段名/枚举值
+
+**参考来源**：A2A 官方规范 https://a2a-protocol.org/latest/specification/（Latest Released Version 1.0.0，2026-05-28 v1.0.1）
