@@ -244,7 +244,6 @@ export default withMermaid({
             { text: 'DeepSeek V3/V4', link: '/openai-api/07-deepseek' },
             { text: 'Kimi 月之暗面', link: '/openai-api/08-kimi' },
             { text: '通义千问 Qwen', link: '/openai-api/09-qwen' },
-            { text: '对比总结与选型', link: '/openai-api/10-practice-summary' },
           ]
         }
       ],

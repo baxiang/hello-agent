@@ -48,7 +48,6 @@
 | 07 | [DeepSeek V3/V4](./07-deepseek.md) | |
 | 08 | [Kimi 月之暗面](./08-kimi.md) | |
 | 09 | [通义千问 Qwen](./09-qwen.md) | |
-| 10 | [对比总结与选型](./10-practice-summary.md) | |
 
 ## 为什么需要学这层协议
 
@@ -71,4 +70,4 @@
 
 1. **入门**：[00 第一次调用](./getting-started/00-first-call.md) → [01 messages](./getting-started/01-messages-intro.md) → [02 token](./getting-started/02-tokens.md) → [03 参数](./getting-started/03-core-params.md)
 2. **进阶**：[协议总览](./00-overview.md) → [Messages](./01-messages.md) → [响应格式](./02-response.md) → [流式](./03-streaming.md) → [Function Calling](./04-function-calling.md) → [多模态](./05-multimodal.md) → [参数全解](./06-parameters.md)
-3. **实战**：[DeepSeek](./07-deepseek.md) → [Kimi](./08-kimi.md) → [Qwen](./09-qwen.md) → [选型总结](./10-practice-summary.md)
+3. **实战**：[DeepSeek](./07-deepseek.md) → [Kimi](./08-kimi.md) → [Qwen](./09-qwen.md)
