@@ -1,8 +1,38 @@
 # Session 管理 - 多轮对话与会话生命周期控制
 
+> **源码路径**：[`trpc-agent-go/examples/session/`](../../../../trpc-agent-go/examples/session)
+> **子示例数**：7 个 · 本页为分类索引，每个子示例有独立详解
+
 ## 概述
 
-Session 管理是 AI Agent 实现多轮对话的基础设施。trpc-agent-go 的 Session 系统提供了完整的会话生命周期管理能力，包括会话创建与切换、事件数量限制（滑动窗口）、TTL 过期机制、Hook 拦截器、状态存储（Persona 等场景）、直接事件追加，以及与 Graph Agent 的集成。框架支持 9 种存储后端，覆盖从开发到分布式生产环境的全场景。
+Session 管理是 AI Agent 实现多轮对话的基础设施。trpc-agent-go 的 `session/` 示例目录用 **7 个独立子示例**展示了会话生命周期的完整光谱：从最基础的多后端多会话切换，到事件直写、滑动窗口、TTL 过期、Hook 拦截、会话人格、再到 Graph Agent 集成。框架支持 9 种存储后端，覆盖从开发到分布式生产环境的全场景。
+
+## 子示例导航
+
+| 子示例 | 形态 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`simple/`](./session-simple.md) | 交互式 | 入门 | 多后端多会话切换 + 语义召回（pgvector） |
+| [`appendevent/`](./session-appendevent.md) | 交互式 | 入门 | 绕过模型直接把任意角色事件写入会话 |
+| [`eventlimit/`](./session-eventlimit.md) | 自动脚本 | 入门 | 滑动窗口：限制每会话事件条数 |
+| [`ttl/`](./session-ttl.md) | 自动脚本 | 入门 | 时间维度：会话 TTL 过期与重建 |
+| [`hook/`](./session-hook.md) | 自动脚本 | 进阶 | AppendEventHook + GetSessionHook：内容过滤、连续消息修复 |
+| [`persona/`](./session-persona.md) | 交互式 | 进阶 | 用 session.State 存每会话独立人格 |
+| [`graph/`](./session-graph.md) | 交互式 | 进阶 | Graph Agent 与 Session 协作，验证快照不污染 State |
+
+## 选型建议
+
+```
+需要多轮对话上下文？
+├── 想快速上手、对比多种后端          → simple
+├── 想预灌历史/系统上下文/元数据       → appendevent
+├── 担心上下文超长、想控 token 长度     → eventlimit
+├── 想让会话自动过期（合规/隐私）       → ttl
+├── 要做内容审核、违规过滤、消息修复    → hook
+├── 每会话需要独立人格/角色            → persona
+└── 一轮对话要走多步流水线/图编排       → graph
+
+生产组合拳：eventlimit + ttl + hook（控长度 + 控寿命 + 控合规）
+```
 
 ## 核心概念
 
@@ -11,301 +41,119 @@ Session 管理是 AI Agent 实现多轮对话的基础设施。trpc-agent-go 的
 一个 Session 由以下核心要素组成：
 
 - **Key**：由 `AppName + UserID + SessionID` 三元组唯一标识
-- **Events**：有序的事件列表，每个事件包含用户消息或 Agent 响应
-- **State**：键值对状态存储，可保存自定义业务数据（如 Persona）
+- **Events**：有序的事件列表，每个事件包含用户消息或 Agent 响应（1 轮对话 = 2 事件）
+- **State**：键值对状态存储（`session.StateMap` = `map[string][]byte`），可保存自定义业务数据（如 Persona、图业务字段）
 - **TTL**：可选的生存时间，过期后会话自动清除
 
-### 存储后端
+### 会话模式对比
 
-通过 `-session` 参数切换后端：
+| 特性 | simple | appendevent | eventlimit | ttl | hook | persona | graph |
+|------|--------|-------------|------------|-----|------|---------|-------|
+| 形态 | 交互 | 交互 | 自动脚本 | 自动脚本 | 自动脚本 | 交互 | 交互 |
+| 默认后端 | redis | 仅 inmemory | inmemory | inmemory | inmemory | inmemory | 仅 inmemory |
+| 写入方式 | 模型产生 | 手工直写 | 模型产生 | 模型产生 | 模型产生 | 模型产生 | 图编排 |
+| 用 State | 否 | 否 | 否 | 否 | 否 | 是（persona） | 是（业务字段） |
+| 生命周期控制 | EventLimit+TTL | — | EventLimit | TTL | — | EventLimit+TTL | — |
+| 拦截器 | — | — | — | — | Append+Get Hook | — | — |
 
-| 后端 | 特点 | 适用场景 |
-|------|------|---------|
-| `inmemory` | 内存存储，进程重启丢失 | 开发测试 |
-| `noop` | 空实现，不持久化 | 无状态场景 |
-| `sqlite` | 本地文件存储 | 单机部署 |
-| `redis` | 支持 Tracing | 高并发生产环境 |
-| `postgres` / `pgvector` | pgvector 支持语义搜索 | 需要事件召回的场景 |
-| `mysql` / `tdsql` | TDSQL 支持分布式分片 | 腾讯云生态 |
-| `clickhouse` | 列式存储 | 分析型场景 |
+### Session Service 接线模式
 
-### Hook 机制
-
-Session 系统提供两类 Hook，可在事件写入和会话读取时注入自定义逻辑：
-
-- **AppendEventHook**：事件写入时触发，可修改、标记或拦截事件
-- **GetSessionHook**：会话读取时触发，可过滤、变换事件列表
-
-## 代码解析
-
-### 基础多轮对话（simple/main.go）
-
-simple 示例展示了 Session 管理的核心用法：创建 Runner、运行多轮对话、切换和列出会话。
-
-**创建 Session Service 和 Runner**
+所有子示例都遵循同一种"Service + Runner"接线，只是 Service 配置和 Agent 类型不同：
 
 ```go
 sessionService, err := util.NewSessionServiceByType(
     sessionType,
     util.SessionServiceConfig{
-        EventLimit:    *eventLimit,    // 事件数量上限
-        TTL:           *sessionTTL,    // 会话过期时间
-        EnableTracing: *enableTrace,   // 启用链路追踪
+        EventLimit:       ...,  // 滑动窗口（eventlimit / simple / persona）
+        TTL:              ...,  // 过期时间（ttl / simple / persona）
+        AppendEventHooks: ...,  // 写入拦截器（hook）
+        GetSessionHooks:  ...,  // 读取拦截器（hook）
+        EnableTracing:    ...,  // 链路追踪（simple，仅 redis）
     },
 )
 
-c.runner = runner.NewRunner(
+runner := runner.NewRunner(
     appName,
-    llmAgent,
-    runner.WithSessionService(sessionService),  // 绑定 Session 服务
+    agent,                              // llmagent / graphagent
+    runner.WithSessionService(sessionService),
 )
 ```
 
-**执行对话**
+### 存储后端
 
-Runner 自动管理会话上下文，通过 `userID` 和 `sessionID` 隔离不同用户和会话：
+通过 `util.NewSessionServiceByType` 切换，共 9 种（由 `session/util.go` 统一管理）：
 
-```go
-eventChan, err := c.runner.Run(
-    ctx,
-    c.userID,      // 用户标识
-    c.sessionID,   // 会话标识
-    message,
-    agent.WithRequestID(requestID),  // 请求追踪 ID
-)
-```
+| 后端 | 检索增强 | 适用场景 | 环境变量 |
+|------|---------|---------|---------|
+| `inmemory` | — | 开发测试（多数子示例默认） | — |
+| `noop` | — | 无状态场景，Runner 走流程不持久化 | — |
+| `sqlite` | — | 本地单机 | `SQLITE_SESSION_DSN` |
+| `redis` | — | 高并发生产，支持 Langfuse Tracing | `REDIS_ADDR` |
+| `postgres` | — | 关系型持久化 | `PG_*` |
+| `pgvector` | 语义搜索 | 唯一实现 `SearchableService` | `PGVECTOR_*` + embedding |
+| `mysql` | — | 关系型持久化 | `MYSQL_*` |
+| `tdsql` | — | 分布式分片（腾讯云） | `TDSQL_*` |
+| `clickhouse` | — | 列式分析型 | `CLICKHOUSE_*` |
 
-**语义搜索（pgvector 后端）**
+> 仅 simple / eventlimit / ttl / hook 支持全部 9 后端；persona 支持 6 种（无 noop/pgvector/tdsql）；appendevent / graph 硬编码 inmemory。
 
-pgvector 后端实现了 `SearchableService` 接口，支持语义事件召回：
+### 生命周期双轴 + 拦截器三件套
 
-```go
-if searchable, ok := sessionService.(session.SearchableService); ok {
-    results, err := searchable.SearchEvents(ctx, session.EventSearchRequest{
-        Query:      query,
-        UserKey:    session.UserKey{AppName: appName, UserID: c.userID},
-        SessionIDs: []string{c.sessionID},
-        MaxResults: *searchTopK,
-    })
-}
-```
+生产级会话治理通常叠加三种机制：
 
-### 事件数量限制（eventlimit/main.go）
+| 机制 | 控制维度 | 配置项 | 触发效果 |
+|------|---------|--------|---------|
+| EventLimit | 事件条数 | `SessionServiceConfig.EventLimit` | 滑动窗口，保留最近 N 事件 |
+| TTL | 存活时长 | `SessionServiceConfig.TTL` | 整体过期，`GetSession` 返回 nil |
+| Hook | 事件内容 | `AppendEventHooks` / `GetSessionHooks` | 写入打标、读取过滤 |
 
-EventLimit 实现滑动窗口机制，当事件数量超过上限时，自动丢弃最早的事件。
+三者正交，可同时启用——详见 [`eventlimit`](./session-eventlimit.md) / [`ttl`](./session-ttl.md) / [`hook`](./session-hook.md)。
 
-```go
-sessionService, err := util.NewSessionServiceByType(
-    util.SessionType(*sessionType),
-    util.SessionServiceConfig{EventLimit: *eventLimit},  // 如设置为 4
-)
-```
-
-一次对话产生 2 个事件（用户消息 + Agent 响应），`EventLimit=4` 意味着只保留最近 2 轮对话。示例通过发送 4 条消息后验证滑动窗口行为：
-
-```go
-// 发送 4 条消息后，只有最近 2 轮被保留
-sess, err := sessionService.GetSession(ctx, key)
-// len(sess.Events) <= eventLimit
-```
-
-Agent 能记住最近的消息（如"最喜欢的颜色是蓝色"），但更早的消息（如"我叫 Alice"）会被遗忘。
-
-### TTL 过期机制（ttl/main.go）
-
-TTL 控制会话的生存时间，过期后会话数据被自动清除。
-
-```go
-sessionService, err := util.NewSessionServiceByType(
-    util.SessionType(*sessionType),
-    util.SessionServiceConfig{
-        EventLimit: 100,
-        TTL:        ttl,    // 如 10 秒
-    },
-)
-```
-
-示例分三阶段验证：
-
-1. **建立对话**：发送多条消息，验证会话和事件存在
-2. **等待过期**：等待 TTL + 2 秒，验证 `GetSession` 返回 `nil`
-3. **重新对话**：过期后发送消息，创建全新会话，Agent 不再记得之前的信息
-
-### Hook 系统（hook/main.go + hooks.go）
-
-Hook 示例展示了两个实用场景：内容过滤和连续用户消息处理。
-
-**内容违规标记（AppendEventHook）**
-
-在事件写入时检测违禁词并打标签：
-
-```go
-func MarkViolationHook() session.AppendEventHook {
-    return func(ctx *session.AppendEventContext, next func() error) error {
-        content := getEventContent(ctx.Event)
-        if word := containsProhibitedWord(content); word != "" {
-            ctx.Event.Tag = appendTags(ctx.Event.Tag, ViolationTagPrefix+word)
-        }
-        return next()  // 调用 next() 继续写入链
-    }
-}
-```
-
-**违规内容过滤（GetSessionHook）**
-
-在会话读取时，将被标记的事件及其配对问答一起过滤掉，防止违规内容进入 LLM 上下文：
-
-```go
-func FilterViolationHook() session.GetSessionHook {
-    return func(ctx *session.GetSessionContext, next func() (*session.Session, error)) (*session.Session, error) {
-        sess, err := next()
-        filterViolationEvents(sess)  // 移除违规事件和配对的问答
-        return sess, nil
-    }
-}
-```
-
-**连续用户消息处理**
-
-提供三种策略处理用户连续发送多条消息（无 Assistant 响应间隔）的情况：
-
-- `merge` - 合并连续消息为一条
-- `placeholder` - 插入占位 Assistant 响应
-- `skip` - 只保留最后一条用户消息
-
-### Session 状态与 Persona（persona/main.go）
-
-Persona 示例展示如何利用 Session State 实现每会话独立人格：
-
-**存储 Persona 到 Session State**
-
-```go
-err := d.sessionService.UpdateSessionState(ctx, key, session.StateMap{
-    personaStateKey: []byte(persona),
-})
-```
-
-**每次请求动态注入 Persona**
-
-```go
-persona, _ := d.currentPersona(ctx)
-eventChan, err := d.runner.Run(
-    ctx, d.userID, d.sessionID,
-    model.NewUserMessage(userInput),
-    agent.WithGlobalInstruction(buildPersonaInstruction(persona)),
-)
-```
-
-通过 `agent.WithGlobalInstruction` 在运行时覆盖系统提示词，每个会话可以拥有不同的 AI 人格（如"严格的代码审查员"、"友善的 Go 导师"等）。
-
-### 直接追加事件（appendevent/main.go）
-
-AppendEvent 示例展示如何不经过模型调用，直接向 Session 写入事件：
-
-```go
-invocationID := uuid.New().String()
-evt := event.NewResponseEvent(
-    invocationID,   // 唯一调用标识
-    author,         // 事件作者："user"/"system"/agent 名
-    &model.Response{
-        Done: false,
-        Choices: []model.Choice{
-            {Index: 0, Message: message},
-        },
-    },
-)
-err := c.sessionSvc.AppendEvent(ctx, sess, evt)
-```
-
-典型应用场景包括：预加载历史对话、注入系统上下文、记录用户操作元数据等。
-
-### Graph Agent 集成（graph/main.go）
-
-graph 示例展示了 Graph Agent 如何与 Session 协作。Graph Agent 通过 StateGraph 定义多步处理流程，最终状态快照存储在 Session State 中：
-
-```go
-sg := graph.NewStateGraph(schema)
-sg.AddNode("normalize", normalizeInput)    // 输入规范化
-sg.AddNode("answer", draftAnswer)          // 生成草稿
-sg.AddAgentNode("assistant", ...)          // LLM 子 Agent
-sg.AddNode("collect", collectAnswer)       // 收集最终结果
-```
-
-Graph 的执行状态（如 `business_result`、`agent_reply` 等）通过 `session.State` 跨轮次持久化。
-
-## 运行方式
-
-### 环境准备
+## 共通的运行命令
 
 ```bash
+# 通用前置
 export OPENAI_API_KEY="your-api-key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+
+# 各子示例入口
+cd examples/session/simple      && go run main.go                 # 默认 redis
+cd examples/session/appendevent && go run main.go helper.go       # 两文件必同编
+cd examples/session/eventlimit  && go run main.go                 # 自动脚本
+cd examples/session/ttl         && go run main.go                 # 自动脚本（会等待）
+cd examples/session/hook        && go run .                       # 自动脚本
+cd examples/session/persona     && go run .                       # 交互
+cd examples/session/graph       && go run .                       # 交互
 ```
 
-### 运行各示例
+## 共同的环境变量
 
-```bash
-# 基础多轮对话
-cd examples/session/simple
-go run main.go -session=inmemory
+最关键的两个（详见各子示例文档）：
 
-# 事件数量限制
-cd examples/session/eventlimit
-go run main.go -limit=4 -session=redis
+| 变量 | 说明 |
+|------|------|
+| `OPENAI_API_KEY` | 对话/embedding 模型的 API Key |
+| `OPENAI_BASE_URL` | 模型端点（默认 `https://api.openai.com/v1`） |
 
-# TTL 过期
-cd examples/session/ttl
-go run main.go -ttl=10 -session=inmemory
+切换后端时还需 `SQLITE_SESSION_DSN` / `REDIS_ADDR` / `PG_*` / `PGVECTOR_*`（含 `PGVECTOR_EMBEDDER_MODEL`、`OPENAI_EMBEDDING_API_KEY`）/ `MYSQL_*` / `CLICKHOUSE_*` 等，详见各子示例。
 
-# Hook 系统
-cd examples/session/hook
-go run . -session=redis -consecutive=merge
+## 学习路径建议
 
-# Persona 人格
-cd examples/session/persona
-go run main.go -session=inmemory
-
-# 直接追加事件
-cd examples/session/appendevent
-go run main.go
-
-# Graph Agent 集成
-cd examples/session/graph
-go run ./graph -debug
-```
-
-### 预期输出示例（eventlimit）
-
-```
-Phase 1: build conversation (will exceed limit)
-Event limit: 4 (= 2 conversation turns)
-
-[Turn 1] User: My name is Alice.
-         Assistant: Nice to meet you, Alice!
-         Events in session: 2
-
-[Turn 3] ...
-         Events in session: 4   <- 达到上限
-
-Phase 2: verify sliding window
-[OK] Event count (4) <= limit (4)
-
-Phase 3: test what the assistant remembers
-Testing: recent - should remember
-   User: What's my favorite color?
-   Assistant: Your favorite color is blue.
-Testing: early - may be forgotten
-   User: What's my name?
-   Assistant: I don't have that information.  <- 早期消息已被丢弃
-```
+1. **先读 [`simple`](./session-simple.md)**：理解 `Runner + SessionService` 接线和三元组隔离，这是所有子示例的基础
+2. **再读 [`appendevent`](./session-appendevent.md)**：看 Event 的结构，理解"绕过模型直写"在后续示例（如 hook 的断线模拟）中的应用
+3. **按生命周期需求读 [`eventlimit`](./session-eventlimit.md) / [`ttl`](./session-ttl.md)**：理解数量轴与时间轴的双轨控制
+4. **进阶读 [`hook`](./session-hook.md)**：掌握 AppendEventHook / GetSessionHook 的洋葱模型
+5. **按业务形态读 [`persona`](./session-persona.md) / [`graph`](./session-graph.md)**：理解 `session.State` 的两种典型用法（人格存储 / 业务字段）
 
 ## 总结
 
-Session 管理系统的核心设计要点：
+Session 系统的设计精髓在于**解耦与正交**：
 
-1. **生命周期完整**：覆盖创建、读写、切换、过期、清理的全生命周期
-2. **滑动窗口**：EventLimit 机制防止会话无限膨胀，自动保留最近事件
-3. **Hook 拦截器**：AppendEventHook 和 GetSessionHook 提供写入时标记和读取时过滤的双重拦截能力，适用于内容审核、消息修复等场景
-4. **状态存储**：Session State 支持任意键值对，可实现 Persona、业务状态等自定义数据持久化
-5. **多后端统一**：9 种后端通过统一接口切换，pgvector 额外支持语义搜索
+- **Agent 类型解耦**：`llmagent`（simple/persona/hook）、`graphagent`（graph）共用同一套 Runner + SessionService
+- **生命周期正交**：EventLimit（数量轴）、TTL（时间轴）、Hook（内容轴）可任意叠加
+- **后端无关**：9 种后端共享同一 `session.Service` 接口，pgvector 额外实现 `SearchableService`
+- **State 通用**：`session.StateMap` 既能存 persona（业务角色），也能存图编排的业务字段
 
-Session 系统是 Memory 系统（`memory/` 示例）的底层依赖：每次 Runner 运行时，都通过 Session Service 加载历史事件构建上下文。两者结合使用时，Session 管理短期对话上下文，Memory 管理长期用户信息。
+理解了 simple 的两行接线（`NewSessionServiceByType` + `WithSessionService`）和三元组隔离，其它子示例都是在同一骨架上替换组件、叠加配置。
+
+Session 与 [`06-memory-system`](../06-memory-system/memory.md) 紧密配合：Session 负责单次会话的短期上下文（事件历史），Memory 负责跨会话的长期信息（用户画像）。生产环境建议组合使用，并根据数据规模、合规要求、检索需求选择合适的后端与机制。

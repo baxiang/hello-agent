@@ -1,113 +1,130 @@
-# 内置工具集 - 框架预置的开箱即用工具
+# Tool 工具系统 - 让 Agent 拥有调用外部能力的手
+
+> **源码路径**：[`trpc-agent-go/examples/tool/`](../../../../trpc-agent-go/examples/tool)
+> **子示例数**：4 个 · 本页为分类索引，每个子示例有独立详解
 
 ## 概述
 
-tRPC-Agent-Go 框架提供了多种内置工具（Built-in Tools），涵盖代码执行、主机命令执行、知识库检索和网页抓取等常见场景。本文将介绍 `tool/` 目录下的四类内置工具示例：`codeexec`（代码执行）、`hostexec`（主机命令执行）、`openviking`（知识库检索）和 `webfetch`（网页内容抓取），帮助开发者快速了解框架的工具生态。
+Tool 是 Agent 与外部世界交互的"手"——模型通过 Tool Call 主动决定何时执行代码、跑命令、查知识库、抓网页。trpc-agent-go 的 `tool/` 示例目录用 **4 个独立子示例**展示了内置工具生态的完整光谱：从本机代码执行到外部检索服务，从单一工具到工具集，从本地 HTTP 到云端智能抓取。
+
+## 子示例导航
+
+| 子示例 | 文章 | 类型 | 一句话说明 |
+|--------|------|------|-----------|
+| [`codeexec/`](./tool-codeexec.md) | [`tool-codeexec`](./tool-codeexec.md) | `tool.Tool`（单工具） | 让模型自主通过 Tool Call 执行 Python / Bash 代码 |
+| [`hostexec/`](./tool-hostexec.md) | [`tool-hostexec`](./tool-hostexec.md) | `tool.ToolSet`（工具集） | 让模型在 base dir 里跑 shell，支持长任务与轮询 |
+| [`openviking/`](./tool-openviking.md) | [`tool-openviking`](./tool-openviking.md) | 外部服务 ToolSet | 对接 OpenViking 知识库，"先搜后读"+ Profile 分级 |
+| [`webfetch/`](./tool-webfetch.md) | [`tool-webfetch`](./tool-webfetch.md) | `tool.Tool`（两套实现） | HTTP 直抓 vs Gemini 服务端抓取，含原文对照 |
+
+## 选型决策树
+
+```
+需要让 Agent 调用外部能力？
+├── 纯计算 / 数据分析（Python、Bash 代码片段）
+│   ├── 需要沙箱隔离 / 云端执行            → codeexec（local / jupyter / e2b）
+│   └── 只在本机跑、可信环境               → codeexec（local）
+│
+├── 本机工程作业（跑测试、看目录、起服务）
+│   ├── 需要长任务 + stdin 交互            → hostexec
+│   └── 一次性命令                         → hostexec（yield_time_ms=0）
+│
+├── 查询数据
+│   ├── 私有知识库（已建索引）             → openviking（search then read）
+│   └── 开放网页
+│       ├── 需要原文 / 精确限额            → webfetch/httpfetch
+│       └── 需要智能总结 / 对比            → webfetch/geminifetch
+```
 
 ## 核心概念
 
-框架内置工具通过 `tool.ToolSet` 或 `tool.Tool` 接口提供，可以直接注册到 Agent 上使用。每种工具封装了特定领域的能力，开发者无需从零实现。
+### Tool vs ToolSet
 
-## 代码解析
+trpc-agent-go 工具系统有两个基础抽象，**注册 API 不同**：
 
-### 1. codeexec - 代码执行工具
+| 抽象 | 接口 | 构造样例 | 注册方式 |
+|------|------|---------|---------|
+| **Tool**（单一工具） | `tool.Tool` | `codeexec.NewTool(...)` | `llmagent.WithTools([]tool.Tool{...})` |
+| **ToolSet**（工具集） | `tool.ToolSet` | `hostexec.NewToolSet(...)` | `llmagent.WithToolSets([]tool.ToolSet{...})` |
 
-该示例展示如何让 Agent 执行 Python 或 Bash 代码。核心在于创建代码执行器并绑定工具：
+ToolSet 内部可暴露多个协同工具（如 `hostexec` 的 exec/write_stdin/kill），模型看到的是一组工具。本目录的 4 个示例里，`codeexec` 和 `webfetch` 用 Tool，`hostexec` 和 `openviking` 用 ToolSet。
+
+### 四类内置工具的能力光谱
+
+| 维度 | codeexec | hostexec | openviking | webfetch |
+|------|----------|----------|-----------|----------|
+| 解决问题 | 算 / 处理 | 本机执行 | 查私库 | 查公网 |
+| 数据来源 | 代码沙箱 | 宿主机 | OpenViking 服务 | 互联网 |
+| 抽象层级 | 代码块 | shell 会话 | 检索 API | URL |
+| 注册方式 | `WithTools` | `WithToolSets` | `WithToolSets` | `WithTools` |
+| 内含工具数 | 1（execute_code） | 3（exec/write_stdin/kill） | 6~10（按 Profile） | 1（web_fetch / gemini_web_fetch） |
+| 是否有状态 | 否 | ✅ session | ✅ 服务端 | 否 |
+| 后端可插拔 | ✅ local/jupyter/e2b | ❌ | ❌ | ✅ http/gemini |
+| 外部依赖 | 可选（jupyter/e2b） | 无 | openviking-server | 可选（GEMINI_API_KEY） |
+
+### 共通的接线模式
+
+无论用 Tool 还是 ToolSet，所有示例都遵循同样的"三件套"接线：
 
 ```go
-// 创建代码执行器（支持 local、jupyter、e2b 三种后端）
-executor = local.New(local.WithTimeout(30 * time.Second))
+// 1. 创建工具 / 工具集
+fetchTool := httpfetch.NewTool(httpfetch.WithMaxContentLength(50000))
 
-// 创建代码执行工具
-codeExecTool := codeexec.NewTool(executor,
-    codeexec.WithDescription("Execute Python or Bash code..."),
+// 2. 注册给 LLM Agent
+llmAgent := llmagent.New(
+    "my-agent",
+    llmagent.WithModel(modelInstance),
+    llmagent.WithTools([]tool.Tool{fetchTool}),         // 或 WithToolSets
+    llmagent.WithInstruction("...如何使用工具的指引..."),
 )
 
-// 注册到 Agent
-llmagent.WithTools([]tool.Tool{codeExecTool})
+// 3. 绑定到 Runner
+r := runner.NewRunner("my-app", llmAgent)
 ```
 
-框架通过 `codeexecutor` 抽象层支持多种执行后端，`local` 直接在本地进程执行，`jupyter` 通过 Jupyter Kernel 执行，`e2b` 使用云端沙箱。
+`Instruction` 是这套模式里**容易被忽略但极其重要**的一环：模型如何使用工具（要不要先搜后读、要不要先用 overview、要不要避免递归 browse）全靠 system prompt 约束。每个子示例都有专门的 Instruction 段落说明这一点。
 
-### 2. hostexec - 主机命令执行工具
+## 共通的运行约定
 
-`hostexec` 提供 ToolSet 级别的工具集，支持在宿主机上执行 Shell 命令：
+### 通用环境变量
 
-```go
-toolSet, err := hostexec.NewToolSet(
-    hostexec.WithBaseDir(baseDir),
-)
+| 变量 | 适用 | 说明 |
+|------|------|------|
+| `OPENAI_API_KEY` | 全部 | 对话模型 API Key |
+| `OPENAI_BASE_URL` | 全部（可选） | 模型端点（兼容服务用） |
+| `GEMINI_API_KEY` | 仅 geminifetch | Gemini 抓取模型 API Key |
+| `E2B_API_KEY` | 仅 codeexec 的 e2b 后端 | E2B / CubeSandbox Key |
+| `OPENVIKING_API_KEY` | 仅 openviking | OpenViking 鉴权 |
 
-llmagent.WithToolSets([]tool.ToolSet{toolSet})
-```
+### 通用退出命令
 
-该工具集内部包含 `exec_command`、`write_stdin`、`kill_session` 等多个工具，支持长时间运行的命令和交互式操作。注意它使用 `WithToolSets` 而非 `WithTools` 注册。
+所有 4 个示例都支持 `exit`（大小写不敏感）退出交互循环。
 
-### 3. openviking - 知识库检索工具
-
-`openviking` 工具集对接 OpenViking 上下文数据库，遵循"先搜索后读取"的检索模式：
-
-```go
-ts, err := openviking.NewToolSet(
-    openviking.WithBaseURL(*ovURL),
-    openviking.WithAPIKey(*apiKey),
-    openviking.WithProfile(selectedProfile),
-)
-
-llmagent.WithToolSets([]tool.ToolSet{ts})
-```
-
-工具集提供 `viking_search`、`viking_find`、`viking_read` 等工具，Agent 先搜索定位相关文档的 URI，再读取具体内容。Profile 参数（retrieval/agent/admin）控制暴露的工具范围。
-
-### 4. webfetch - 网页抓取工具
-
-`webfetch` 提供两种实现：基于 HTTP 的 `httpfetch` 和基于 Gemini 的 `geminifetch`。
-
-**httpfetch** 直接通过 HTTP 请求抓取网页并转换为 Markdown：
-
-```go
-fetchTool := httpfetch.NewTool(
-    httpfetch.WithMaxContentLength(50000),
-    httpfetch.WithMaxTotalContentLength(150000),
-)
-```
-
-**geminifetch** 利用 Gemini 的 URL Context 功能在服务端完成抓取和分析：
-
-```go
-fetchTool, err := geminifetch.NewTool(geminiModel)
-```
-
-## 运行方式
+### 启动命令速查
 
 ```bash
-# 代码执行工具
-cd examples/tool/codeexec
-export OPENAI_API_KEY="your-key"
-go run . -executor=local
+# codeexec
+cd examples/tool/codeexec       && go run . -executor local
 
-# 主机命令执行工具
-cd examples/tool/hostexec
-go run . -base-dir=.
+# hostexec
+cd examples/tool/hostexec       && go run . -base-dir .
 
-# OpenViking 知识库工具（需要 OpenViking 服务）
-cd examples/tool/openviking
-go run . -openviking=http://localhost:1933
+# openviking（需先启动 openviking-server）
+cd examples/tool/openviking     && go run . -profile agent
 
-# HTTP 网页抓取工具
-cd examples/tool/webfetch/httpfetch
-go run .
-
-# Gemini 网页抓取工具
-cd examples/tool/webfetch/geminifetch
-go run . -gemini-model=gemini-2.5-flash
+# webfetch（两套实现二选一）
+cd examples/tool/webfetch/httpfetch   && go run .
+cd examples/tool/webfetch/geminifetch && go run . -gemini-model gemini-2.5-flash
 ```
+
+## 学习路径建议
+
+1. **先读 [`codeexec`](./tool-codeexec.md)**：理解最基础的 "Tool 定义 + WithTools 注册 + 事件三段式分发" 模式，这是所有工具示例的骨架
+2. **再读 [`hostexec`](./tool-hostexec.md)**：看 ToolSet 如何暴露多个协同工具、`yield_time_ms` 如何支撑长任务，理解 `WithToolSets` 与 `WithTools` 的差异
+3. **进阶读 [`openviking`](./tool-openviking.md)**：外部服务对接、Profile 分级、search-then-read 范式，是构建企业级 Agent 的关键参考
+4. **对照读 [`webfetch`](./tool-webfetch.md)**：同一问题的两种实现（本地 vs 云端），理解工具的可替换性
 
 ## 总结
 
-内置工具是 tRPC-Agent-Go 工具系统的基石。关键要点：
+Tool 系统的设计精髓在于**抽象统一、实现可换**：同一套 `tool.Tool` / `tool.ToolSet` 接口，下层可以是本机代码、宿主机 shell、外部检索服务、开放网页；上层注册方式只有 `WithTools` / `WithToolSets` 两种。理解了 codeexec 的最简骨架，其它三个示例都是在这个骨架上替换"工具来源"和"事件处理细节"。
 
-- **Tool vs ToolSet**：单一功能使用 `tool.Tool`，多工具组合使用 `tool.ToolSet`
-- **执行后端可插拔**：如 `codeexec` 支持 local/jupyter/e2b 三种后端
-- **安全边界**：`hostexec` 限制工作目录，`webfetch` 限制内容长度
-- 这些内置工具可以与自定义的 `function.NewFunctionTool` 混合使用，参见 [multitools](./multitools.md) 示例
+Tool 与 [`06-memory-system/`](../06-memory-system/memory.md) 紧密配合：Memory 让 Agent 跨会话记住信息，Tool 让 Agent 在单次会话里调用外部能力。生产环境通常会把多个 Tool / ToolSet 一起注册给同一个 Agent——比如同时给模型 `execute_code` + `web_fetch` + `memory_search`，让它在一次对话中自由组合。

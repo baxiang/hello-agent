@@ -1,168 +1,164 @@
-# 回调系统 - 通过 Agent/Model/Tool 三级回调实现运行时观测与控制
+# 回调系统 - Agent / Model / Tool 三级生命周期钩子
+
+> **源码路径**：[`trpc-agent-go/examples/callbacks/`](../../../../trpc-agent-go/examples/callbacks)
+> **子示例数**：4 个 · 本页为分类索引，每个子示例有独立详解
 
 ## 概述
 
-tRPC-Agent-Go 提供了三级回调机制（AgentCallbacks、ModelCallbacks、ToolCallbacks），允许开发者在 Agent 执行、模型推理和工具调用的前后插入自定义逻辑。该机制广泛应用于日志记录、性能监控、参数修改、结果拦截等场景。
+回调系统是 trpc-agent-go **可观测性与运行时控制**的基石。它把一次 Agent 执行切分成 Agent / Model / Tool 三个层级，每层都提供 Before / After（以及 `ToolResultMessages`）钩子，让你可以在不修改框架代码的前提下，注入日志、鉴权、计时、内容审核、协议改写等任意逻辑。
+
+`examples/callbacks/` 目录用 **1 个顶层示例 + 3 个子目录**覆盖了回调系统的四种典型用法。
+
+## 子示例导航
+
+| 子示例 | 聚焦点 | 难度 | 一句话说明 |
+|--------|--------|------|-----------|
+| [`callbacks/`（basic）](./callbacks-basic.md) | 全景入门 | 入门 | 三级 Before/After 全套钩子 + 参数修改 / Mock / 响应覆盖 |
+| [`callbacks/auth/`](./callbacks-auth.md) | Invocation.State 鉴权 | 进阶 | 工具级权限检查 + 审计日志 |
+| [`callbacks/timer/`](./callbacks-timer.md) | 计时 + OpenTelemetry | 进阶 | 三级耗时测量 + Jaeger/Prometheus 上报 |
+| [`callbacks/imagetool/`](./callbacks-imagetool.md) | ToolResultMessages | 进阶 | 把工具返回的 PNG 字节转成多模态图片消息 |
+
+## 选型建议
+
+```
+需要拦截或观测 Agent 执行？
+├── 第一次接触，想看完整 Before/After 链路 ─────→ basic
+├── 需要在工具层做权限控制 / 审计 ─────────────→ auth
+├── 需要生产级 SLA 指标（P50/P99 耗时、Trace）─→ timer
+└── 工具会产出图片/音频等非文本数据 ──────────→ imagetool
+```
 
 ## 核心概念
 
-回调系统由三个层级组成，每个层级都包含 Before 和 After 两个钩子：
+### 三级回调全景
 
-- **AgentCallbacks**：Agent 执行级别。`BeforeAgent` 在 Agent 开始处理前触发，`AfterAgent` 在 Agent 完成后触发。可获取 `Invocation` 对象，包含 Agent 名称、调用 ID 和用户消息。
-- **ModelCallbacks**：模型推理级别。`BeforeModel` 在 LLM 请求发送前触发，可拦截请求并返回自定义响应；`AfterModel` 在 LLM 响应返回后触发，可覆盖响应内容。
-- **ToolCallbacks**：工具调用级别。`BeforeTool` 在工具执行前触发，可修改参数或返回自定义结果；`AfterTool` 在工具执行后触发，可格式化或替换工具结果。
+| 层级 | 包 | Before 钩子 | After 钩子 | 典型用途 |
+|------|----|-------------|------------|----------|
+| Agent | `agent` | `RegisterBeforeAgent` | `RegisterAfterAgent` | 入参日志、鉴权注入、State 初始化 |
+| Model | `model` | `RegisterBeforeModel` | `RegisterAfterModel` | 请求拦截、Mock 响应、内容审核 |
+| Tool | `tool` | `RegisterBeforeTool` | `RegisterAfterTool` | 参数校验/修改、Mock 结果、结果格式化 |
+| Tool（消息层） | `tool` | — | `RegisterToolResultMessages` | 改写工具结果回传给模型的消息（多模态等） |
 
-每个回调函数都通过 `context.Context` 传递调用上下文，可通过 `agent.InvocationFromContext(ctx)` 获取当前调用信息。
+### 调用顺序
 
-## 代码解析
+一次含工具调用的典型执行：
 
-### 注册回调
+```
+BeforeAgent
+  ├── BeforeModel ── LLM 推理 ── AfterModel
+  ├── BeforeTool  ── 工具执行 ── AfterTool  ── ToolResultMessages
+  └── BeforeModel ── LLM 推理 ── AfterModel
+AfterAgent
+```
+
+### 注册与注入
 
 ```go
+// 传统写法
 modelCallbacks := model.NewCallbacks()
 modelCallbacks.RegisterBeforeModel(beforeModelFn)
 modelCallbacks.RegisterAfterModel(afterModelFn)
 
-toolCallbacks := tool.NewCallbacks()
-toolCallbacks.RegisterBeforeTool(beforeToolFn)
-toolCallbacks.RegisterAfterTool(afterToolFn)
+// 链式写法（推荐，便于复用）
+modelCallbacks := model.NewCallbacks().
+    RegisterBeforeModel(beforeModelFn).
+    RegisterAfterModel(afterModelFn)
 
-agentCallbacks := agent.NewCallbacks()
-agentCallbacks.RegisterBeforeAgent(beforeAgentFn)
-agentCallbacks.RegisterAfterAgent(afterAgentFn)
-
+// 一次性注入 Agent
 llmAgent := llmagent.New("chat-assistant",
     llmagent.WithAgentCallbacks(agentCallbacks),
     llmagent.WithModelCallbacks(modelCallbacks),
     llmagent.WithToolCallbacks(toolCallbacks),
-    // ...
 )
 ```
 
-### BeforeModel：拦截请求并返回自定义响应
+### 回调返回值的"短路"语义
+
+| 回调 | 短路字段 | 效果 |
+|------|---------|------|
+| `BeforeModel` | `BeforeModelResult.CustomResponse` | 跳过 LLM 调用 |
+| `BeforeTool` | `BeforeToolResult.CustomResult` | 跳过工具执行 |
+| `BeforeTool` | `BeforeToolResult.ModifiedArguments` | **不短路**，工具按新参数执行 |
+| `AfterModel` | `AfterModelResult.CustomResponse` | 覆盖模型响应 |
+| `AfterTool` | `AfterToolResult.CustomResult` | 覆盖工具结果 |
+| `BeforeAgent` | `BeforeAgentResult.CustomResponse` | 跳过整个 Agent |
+
+返回 `nil` 则继续默认流程。
+
+### Invocation 与 Invocation State
+
+`agent.Invocation` 是一次 Agent 执行的上下文对象，包含 AgentName、InvocationID、Message，以及一个**线程安全、invocation 级别**的 KV 存储：
 
 ```go
-func createBeforeModelCallback() model.BeforeModelCallbackStructured {
-    return func(ctx context.Context, args *model.BeforeModelArgs) (*model.BeforeModelResult, error) {
-        userMsg := args.Request.Messages[len(args.Request.Messages)-1].Content
-        if strings.Contains(userMsg, "custom model") {
-            return &model.BeforeModelResult{
-                CustomResponse: &model.Response{
-                    Choices: []model.Choice{{
-                        Message: model.Message{
-                            Role:    model.RoleAssistant,
-                            Content: "[Custom response from callback]",
-                        },
-                    }},
-                },
-            }, nil
-        }
-        return nil, nil // 返回 nil 继续正常流程
-    }
+inv.SetState(key, value)
+v, ok := inv.GetState(key)
+inv.DeleteState(key)
+```
+
+| 获取方式 | 适用回调 |
+|----------|----------|
+| `args.Invocation` | Agent 回调（BeforeAgent/AfterAgent） |
+| `agent.InvocationFromContext(ctx)` | Model / Tool 回调 |
+
+State 是 [`auth`](./callbacks-auth.md) 和 [`timer`](./callbacks-timer.md) 共同的"传递桥梁"，但承载内容截然不同：
+
+| 示例 | Key 前缀 | 承载内容 |
+|------|----------|----------|
+| auth | `custom:user_context`、`custom:audit_log` | 用户身份、审计日志 |
+| timer | `agent:`、`model:`、`tool:<name>:<callID>:` | 开始时间、trace span |
+
+### ToolCallID 与并发工具调用
+
+LLM 可在单次响应里返回多个 tool_call，框架**并发**执行它们。要隔离每次调用的 State / Span，必须在 key 中带上 ToolCallID：
+
+```go
+toolCallID := args.ToolCallID           // tool.BeforeToolArgs/AfterToolArgs 自带
+if toolCallID == "" {
+    toolCallID = "default"              // 老版本兼容兜底
 }
+key := fmt.Sprintf("tool:%s:%s:start_time", args.ToolName, toolCallID)
 ```
 
-返回 `BeforeModelResult.CustomResponse` 时，框架跳过实际的 LLM 调用，直接使用回调提供的响应。返回 `nil` 则继续正常流程。
+[`timer`](./callbacks-timer.md) 是唯一演示这一并发安全模式的示例。
 
-### BeforeTool：修改工具参数或返回自定义结果
-
-```go
-func createBeforeToolCallback() tool.BeforeToolCallbackStructured {
-    return func(ctx context.Context, args *tool.BeforeToolArgs) (*tool.BeforeToolResult, error) {
-        // 参数标准化：将 operation 转小写
-        if args.ToolName == "calculator" {
-            var calcArgs calculatorArgs
-            json.Unmarshal(args.Arguments, &calcArgs)
-            calcArgs.Operation = strings.ToLower(calcArgs.Operation)
-            modifiedArgs, _ := json.Marshal(calcArgs)
-            args.Arguments = modifiedArgs
-            return &tool.BeforeToolResult{ModifiedArguments: modifiedArgs}, nil
-        }
-        // 特殊值拦截：参数包含 42 时返回自定义结果
-        if strings.Contains(string(args.Arguments), "42") {
-            return &tool.BeforeToolResult{
-                CustomResult: calculatorResult{Operation: "custom", Result: 4242},
-            }, nil
-        }
-        return nil, nil
-    }
-}
-```
-
-`BeforeToolResult` 支持两种干预方式：`ModifiedArguments` 修改传入参数后继续执行工具；`CustomResult` 直接跳过工具执行。
-
-### 结合 OpenTelemetry 的计时回调
-
-`callbacks/timer` 子示例展示了将回调与 OpenTelemetry 结合的实战模式：
-
-```go
-func (e *toolTimerExample) createBeforeToolCallback() tool.BeforeToolCallbackStructured {
-    return func(ctx context.Context, args *tool.BeforeToolArgs) (*tool.BeforeToolResult, error) {
-        inv, _ := agent.InvocationFromContext(ctx)
-        startTime := time.Now()
-        key := fmt.Sprintf("tool:%s:%s:start_time", args.ToolName, args.ToolCallID)
-        inv.SetState(key, startTime)
-
-        _, span := atrace.Tracer.Start(ctx, "tool_execution",
-            trace.WithAttributes(
-                attribute.String("tool.name", args.ToolName),
-                attribute.String("tool.call_id", args.ToolCallID),
-            ),
-        )
-        inv.SetState(fmt.Sprintf("tool:%s:%s:span", args.ToolName, args.ToolCallID), span)
-        return nil, nil
-    }
-}
-```
-
-通过 `Invocation.SetState/GetState` 在 Before 和 After 回调之间传递临时状态（如开始时间和 Span 对象）。该机制支持并发安全，`ToolCallID` 确保多个并行工具调用不会互相干扰。
-
-After 回调中计算耗时并上报到 OpenTelemetry Metrics：
-
-```go
-e.toolDurationHistogram.Record(ctx, durationSeconds,
-    metric.WithAttributes(attribute.String("tool.name", args.ToolName)),
-)
-e.toolCounter.Add(ctx, 1,
-    metric.WithAttributes(attribute.String("tool.name", args.ToolName)),
-)
-span.End()
-```
-
-## 运行方式
+## 共通的运行命令
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+# 通用前置
+export OPENAI_API_KEY="your-api-key"
 
-# 基础回调示例
-cd examples/callbacks
-go run main.go -model deepseek-v4-flash
-
-# 带 OpenTelemetry 计时的回调示例（需先启动 Collector）
-cd examples/callbacks/timer
-go run main.go -model deepseek-v4-flash
+# 各子示例入口
+cd examples/callbacks            && go run .                    # basic
+cd examples/callbacks/auth       && go run . --role admin       # auth
+cd examples/callbacks/timer      && docker compose up -d && go run .  # timer（需遥测栈）
+cd examples                      && go run ./callbacks/imagetool  # imagetool
 ```
 
-交互时输入 "custom model" 触发 BeforeModel 拦截，输入包含 42 的计算触发 BeforeTool 拦截。
+## 共同的命令行参数
 
-预期输出：
+basic / timer 共用相同的 flag 风格（`-model` / `-streaming`），auth 改用 `--user-id` / `--role` / `--model`，imagetool 仅 `-model` 且默认读 `MODEL_NAME` 环境变量。详见各子示例文档。
 
-```
-BeforeAgentCallback: agent=chat-assistant, invocationID=xxx
-BeforeModelCallback: model=deepseek-v4-flash, lastUserMsg="calculate 2+3"
-BeforeToolCallback: tool=calculator, args={"operation":"add","a":2,"b":3}
-AfterToolCallback: tool=calculator, result={...}
-AfterModelCallback: model=deepseek-v4-flash has finished
-AfterAgentCallback: agent=chat-assistant, completed
-```
+## 四种典型干预手法一览
+
+| 手法 | 出现于 | 适用场景 |
+|------|--------|----------|
+| CustomResponse 短路 | basic 的 BeforeModel / AfterModel | Mock、内容拦截 |
+| ModifiedArguments | basic 的 BeforeTool | 参数标准化、注入上下文 |
+| CustomResult | basic 的 BeforeTool / AfterTool | Mock 结果、结果格式化 |
+| 错误返回 | auth 的 BeforeTool | 鉴权拒绝、参数校验失败 |
+| Invocation.State 注入 | auth 的 BeforeAgent | 用户身份、租户、A/B 分桶 |
+| Metrics + Span | timer 的全部回调 | 性能观测、SLA 监控 |
+| ToolResultMessages | imagetool | 多模态消息构造 |
+
+## 学习路径建议
+
+1. **先读 [`basic`](./callbacks-basic.md)**：理解三级回调的完整接线、四种短路返回、context 取 Invocation——这是所有其他示例的基础
+2. **再读 [`auth`](./callbacks-auth.md)**：看 `Invocation.State` 如何在 Before/After 之间安全传递状态，以及如何用 error 拒绝执行
+3. **接着读 [`timer`](./callbacks-timer.md)**：把回调接入 OpenTelemetry，并掌握 ToolCallID 处理并发工具调用的关键模式
+4. **按需读 [`imagetool`](./callbacks-imagetool.md)**：当需要把工具的非文本结果（图片、音频、文件）送给多模态模型时
 
 ## 总结
 
-回调系统是 tRPC-Agent-Go 可观测性和可控性的基石，关键收获：
+回调系统的设计精髓在于**统一的生命周期切片 + 多种返回值语义**：同一套 Before/After 钩子，既能用来打日志、也能用来拦截请求、还能用来重塑协议消息；同一套 `Invocation.State`，既能装用户身份、也能装计时数据。理解了 basic 的全景图，再按需阅读 auth / timer / imagetool 的专项扩展，就能覆盖 Agent 生产化过程中的绝大多数观测与控制需求。
 
-- **三级粒度**：Agent/Model/Tool 三层回调覆盖了 Agent 执行的全链路
-- **双向干预**：Before 回调可修改输入或跳过执行，After 回调可修改输出
-- **状态传递**：`Invocation.SetState/GetState` 提供了在 Before/After 之间传递状态的安全机制
-- **Context 驱动**：通过 `InvocationFromContext` 在任意回调中获取完整的调用上下文
-
-回调系统与 Telemetry 和 TokenTracker 互为补充：Callbacks 提供应用层的精细控制钩子，Telemetry 提供平台级的链路追踪，TokenTracker 专注于 Token 维度的成本观测。
+回调系统与同目录的 [`telemetry.md`](./telemetry.md)、[`tokentracker.md`](./tokentracker.md) 互为补充：Callbacks 提供应用层的精细控制钩子，Telemetry 提供平台级的自动链路追踪，TokenTracker 专注于 Token 维度的成本观测。

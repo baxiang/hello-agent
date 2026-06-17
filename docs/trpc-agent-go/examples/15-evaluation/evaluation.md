@@ -1,141 +1,167 @@
-# Agent 评测框架 - 全面评估智能体质量的系统化方案
+# 评测系统 - 科学衡量与持续提升 Agent 质量
+
+> **源码路径**：[`trpc-agent-go/examples/evaluation/`](../../../../trpc-agent-go/examples/evaluation)
+> **子示例数**：19 个 · 本页为分类索引，每个子示例有独立详解
 
 ## 概述
 
-tRPC-Agent-Go 提供了一套完整的 Agent 评测框架，支持从评测集管理、指标定义、评测执行到结果存储的全流程自动化。该框架适用于回归测试、上线前质量把关、Prompt 调优等场景，帮助开发者科学地衡量和提升 Agent 的表现。
+tRPC-Agent-Go 的 `evaluation/` 目录用 **19 个独立子示例**展示了 Agent 质量评测的完整光谱：从最基础的本地文件评测，到 LLM 裁判、工具轨迹、动态用户模拟，再到 MySQL 持久化、HTTP 服务化、Langfuse 集成，以及评测驱动的 Prompt 自动优化（PromptIter）。无论你想做回归基线、上线把关还是自动调优，都能在这里找到对应范式。
+
+## 子示例导航
+
+### 评测器与准则（如何打分）
+
+| 子示例 | 角色 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`local`](./evaluation-local.md) | 存储后端 | 入门 | 本地文件承载 EvalSet/Metric/Result，最经典的入门骨架 |
+| [`inmemory`](./evaluation-inmemory.md) | 存储后端 | 入门 | 用例/指标在代码里构造，结果在内存，适合单测 |
+| [`rouge`](./evaluation-rouge.md) | 确定性准则 | 入门 | ROUGE 字面匹配，零成本可复现的回归门槛 |
+| [`jieba`](./evaluation-jieba.md) | 确定性准则 | 进阶 | 注册结巴中文分词器做 ROUGE，解决中文失真 |
+| [`llm`](./evaluation-llm.md) | LLM 裁判 | 进阶 | 6 个子变体（finalresponse/rubric/knowledge/hallucination/template/caselevel） |
+| [`llmverifier`](./evaluation-llmverifier.md) | Best-of-N | 进阶 | 多次采样 + LLM 裁判两两比较，在线选出最优回复 |
+| [`tooltrajectory`](./evaluation-tooltrajectory.md) | 轨迹准则 | 进阶 | 校验 Agent 是否调对工具，顺序无关 + 按字段忽略 |
+| [`trace`](./evaluation-trace.md) | 离线轨迹 | 进阶 | 用预录 trace 评测，跳过推理，离线打分 |
+| [`contextmessage`](./evaluation-contextmessage.md) | 用例构造 | 进阶 | 注入上下文到每次请求但不污染 Session 历史 |
+| [`callbacks`](./evaluation-callbacks.md) | 生命周期钩子 | 进阶 | 8 个阶段钩子，可观测性与扩展点 |
+
+### 动态与 Agent 集成（评什么）
+
+| 子示例 | 角色 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`usersimulation`](./evaluation-usersimulation.md) | 动态模拟 | 进阶 | 模拟用户驱动多轮对话，3 个 Runner |
+| [`usersimulation_expectedrunner`](./evaluation-usersimulation-expectedrunner.md) | 动态模拟 | 进阶 | 引入 expected Runner，候选与参考逐轮对比（4 Runner） |
+| [`claudecode`](./evaluation-claudecode.md) | 外部 Agent | 进阶 | 评测 Claude Code CLI 的 MCP/Skill/Subagent 工具使用 |
+| [`skill`](./evaluation-skill.md) | 能力集成 | 进阶 | 校验 Agent 是否正确加载并执行 Agent Skills |
+
+### 记录器与存储（数据去哪/从哪来）
+
+| 子示例 | 角色 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`evalsetrecorder`](./evaluation-evalsetrecorder.md) | 录制器 | 进阶 | Runner 插件，把真实流量沉淀成可复用 EvalSet |
+| [`mysql`](./evaluation-mysql.md) | 存储后端 | 进阶 | EvalSet/Metric/Result 全部入库，多人协作 |
+
+### 服务化与外部平台（怎么触发）
+
+| 子示例 | 角色 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`server`](./evaluation-server.md) | HTTP 服务 | 进阶 | 把评测暴露成 REST API，供前端/远程触发 |
+| [`langfuse`](./evaluation-langfuse.md) | 平台集成 | 进阶 | 接 Langfuse 远程实验，本地推理 + 回写分数/trace |
+
+### Prompt 优化工作流（评测驱动改进）
+
+| 子示例 | 角色 | 难度 | 一句话说明 |
+|--------|------|------|-----------|
+| [`promptiter`](./evaluation-promptiter.md) | 自动优化 | 进阶 | 评测驱动的 Prompt 自动调优（同步/异步/HTTP/多节点） |
+
+## 选型建议
+
+### 评测准则怎么选
+
+```
+要评什么？
+├── 最终答案字面匹配（答案固定、要可复现）
+│   ├── 英文/空格分词          → rouge
+│   └── 中文                   → jieba（注册结巴分词器）
+├── 最终答案语义质量
+│   ├── 答案对齐               → llm/finalresponse
+│   ├── 多 rubric 维度         → llm/rubricresponse
+│   ├── RAG 检索质量           → llm/knowledgerecall
+│   ├── 事实幻觉检测           → llm/hallucination
+│   ├── 自定义裁判 prompt      → llm/template
+│   └── 用例级 rubric 绑定     → llm/caselevelrubric
+├── 工具调用行为
+│   ├── 在线跑 + 比对          → tooltrajectory
+│   └── 离线预录 trace         → trace
+├── 多轮对话
+│   ├── 模拟用户驱动           → usersimulation
+│   └── 候选 vs 参考逐轮对比   → usersimulation_expectedrunner
+└── 在线选优（生产时）         → llmverifier（Best-of-N）
+```
+
+### 存储/触发怎么选
+
+| 需求 | 推荐 |
+|------|------|
+| 快速试验/单测 | [`inmemory`](./evaluation-inmemory.md) |
+| 工程基线/可 Review | [`local`](./evaluation-local.md) |
+| 多人协作/历史追溯 | [`mysql`](./evaluation-mysql.md) |
+| 没有标注数据冷启动 | [`evalsetrecorder`](./evaluation-evalsetrecorder.md)（录制真实流量） |
+| 前端/远程触发 | [`server`](./evaluation-server.md) |
+| 接 Langfuse 可视化 | [`langfuse`](./evaluation-langfuse.md) |
+| 自动改进 Prompt | [`promptiter`](./evaluation-promptiter.md) |
 
 ## 核心概念
 
-评测框架围绕四大核心组件构建：
+### 四大共享抽象
 
-- **EvalSet（评测集）**：定义测试用例集合，每个用例包含用户输入、期望输出和工具调用轨迹。支持 `inmemory`（内存）和 `local`（本地文件）两种存储方式。
-- **Metric（评测指标）**：定义评分标准和阈值，框架内置了多种评测准则（Criterion），包括 ROUGE 文本相似度、LLM 判别、工具轨迹匹配等。
-- **Evaluator（评测器）**：执行评测逻辑的核心引擎，通过 `registry` 注册机制支持自定义评测器扩展。
-- **EvalResult（评测结果）**：存储评测输出，包含每个用例的得分、状态和详细信息。
+所有评测示例都围绕以下抽象，差别只在"换成哪个后端/准则/触发方式"：
 
-## 代码解析
+- **EvalSet（评测集）**：一组 `EvalCase`，每个含用户输入、期望输出、工具调用轨迹。存储后端可换：inmemory / local / mysql。
+- **Metric（指标）**：评分准则 + 阈值。准则可换：ROUGE / LLM 裁判 / 工具轨迹 / 自定义模板。
+- **Evaluator（评测器）**：`evaluation.New(...)` 组装，执行"推理 → 打分"流水线。
+- **EvalResult（评测结果）**：每用例得分、状态、明细，可落盘/入库/回写平台。
 
-### 基础评测流程
+### 统一的四管理器接线
 
-以 `local` 示例为例，展示最基本的评测搭建过程：
+绝大多数示例共享同一段骨架（以 [`local`](./evaluation-local.md) 为模板）：
 
 ```go
-// 1. 创建被评测的 Runner
-runner := runner.NewRunner(appName, newCalculatorAgent(*modelName, *streaming))
-defer runner.Close()
+evalSetManager    := <backend>.New(...)      // inmemory / local / mysql
+metricManager     := <backend>.New(...)
+evalResultManager := <backend>.New(...)
+registry          := registry.New()
 
-// 2. 初始化各管理器
-evalSetManager := evalsetlocal.New(evalset.WithBaseDir(*dataDir))
-metricManager := metriclocal.New(metric.WithBaseDir(*dataDir))
-evalResultManager := evalresultlocal.New(evalresult.WithBaseDir(*outputDir))
-registry := registry.New()
-
-// 3. 创建评测器
-agentEvaluator, _ := evaluation.New(
-    appName, runner,
+agentEvaluator, _ := evaluation.New(appName, runner,
     evaluation.WithEvalSetManager(evalSetManager),
     evaluation.WithMetricManager(metricManager),
     evaluation.WithEvalResultManager(evalResultManager),
     evaluation.WithRegistry(registry),
-    evaluation.WithNumRuns(*numRuns),
+    // 按需追加：WithJudgeRunner / WithUserSimulator /
+    //          WithExpectedRunner / WithCallbacks / WithMetricRegistry
 )
-defer agentEvaluator.Close()
-
-// 4. 执行评测
-result, _ := agentEvaluator.Evaluate(ctx, *evalSetID)
+result, _ := agentEvaluator.Evaluate(ctx, evalSetID)
 ```
 
-框架遵循统一的"构建管理器 -> 创建评测器 -> 执行评测"三步模式，无论使用内存存储还是文件存储，接口保持一致。
+**存储无关性**：把 inmemory/local/mysql 三个管理器互换，业务代码不变。
+**准则可扩展**：通过 `registry` / `WithMetricRegistry` 注册自定义评测器与分词器（如 [`jieba`](./evaluation-jieba.md)）。
 
-### 内存评测集定义
+### 两个关键扩展点
 
-`inmemory` 示例展示了如何通过代码直接构造评测集，适合单元测试场景：
+- **JudgeRunner**：把 LLM 裁判作为独立 Runner 注入（[`hallucination`](./evaluation-llm.md)、[`usersimulation`](./evaluation-usersimulation.md) 等），指标文件不必写死模型。
+- **Callbacks**：8 个生命周期钩子（[`callbacks`](./evaluation-callbacks.md)），用于日志、监控、改写流程。
 
-```go
-cases := []*evalset.EvalCase{
-    {
-        EvalID: "calc_add",
-        Conversation: []*evalset.Invocation{{
-            UserContent:   &model.Message{Role: model.RoleUser, Content: "calc add 2 3"},
-            FinalResponse: &model.Message{Role: model.RoleAssistant, Content: "calc result: 5"},
-            Tools: []*evalset.Tool{{
-                Name:      "calculator",
-                Arguments: map[string]any{"operation": "add", "a": 2.0, "b": 3.0},
-                Result:    map[string]any{"result": 5.0},
-            }},
-        }},
-    },
-}
-```
+## 学习路径建议
 
-每个 `EvalCase` 包含完整的对话轨迹，可以验证最终回复和工具调用行为是否符合预期。
+1. **先读 [`local`](./evaluation-local.md)**：掌握"四管理器 + 评测器"骨架，这是几乎所有示例的共同基础。
+2. **对比存储后端**：[`inmemory`](./evaluation-inmemory.md)（代码构造）与 [`mysql`](./evaluation-mysql.md)（入库），体会存储无关性。
+3. **学评测准则**：从 [`rouge`](./evaluation-rouge.md)/[`jieba`](./evaluation-jieba.md)（确定性）→ [`llm`](./evaluation-llm.md) 家族（LLM 裁判）→ [`tooltrajectory`](./evaluation-tooltrajectory.md)/[`trace`](./evaluation-trace.md)（行为）。
+4. **进阶动态与服务**：[`usersimulation`](./evaluation-usersimulation.md)、[`server`](./evaluation-server.md)、[`langfuse`](./evaluation-langfuse.md)。
+5. **高阶闭环**：[`promptiter`](./evaluation-promptiter.md) 把评测升级为自动优化。
 
-### 多种评测维度
-
-框架的子目录覆盖了丰富的评测维度：
-
-| 子目录 | 评测维度 | 说明 |
-|--------|---------|------|
-| `rouge/` | 文本相似度 | 基于 ROUGE 指标评估回复与参考答案的匹配度 |
-| `llm/finalresponse/` | LLM 判别 | 使用 LLM 作为裁判评估最终回复质量 |
-| `llm/hallucination/` | 幻觉检测 | 检测 Agent 回复中的事实错误 |
-| `tooltrajectory/` | 工具轨迹 | 验证 Agent 是否按预期顺序调用了正确的工具 |
-| `usersimulation/` | 用户模拟 | 使用模拟用户进行多轮对话评测 |
-| `llmverifier/` | Best-of-N 验证 | 多次采样后通过 LLM 裁判选出最优回复 |
-| `promptiter/` | Prompt 迭代优化 | 自动化 Prompt 调优，支持同步/异步执行 |
-
-### 用户模拟评测
-
-`usersimulation` 示例展示了高级多轮对话评测模式：
-
-```go
-userSimulator, _ := usersimulation.New(simRunner)
-agentEvaluator, _ := evaluation.New(
-    appName, actualRunner,
-    evaluation.WithJudgeRunner(judgeRunner),
-    evaluation.WithUserSimulator(userSimulator),
-    // ...其他配置
-)
-```
-
-该模式使用三个独立的 Runner：候选 Agent、模拟用户和裁判 Agent，实现端到端的自动化多轮对话评测。
-
-## 运行方式
+## 共通的运行方式
 
 ```bash
+# 通用前置
 export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"   # 可选
 
-# 本地文件存储评测
-cd examples/evaluation/local
-go run main.go -model deepseek-v4-flash -eval-set math-basic
+# 入门：本地文件评测
+cd examples/evaluation/local    && go run . -eval-set math-basic
 
-# ROUGE 文本相似度评测
-cd examples/evaluation/rouge
-go run main.go -eval-set rouge-basic
+# 换准则
+cd examples/evaluation/rouge    && go run . -eval-set rouge-basic
+cd examples/evaluation/tooltrajectory && go run . -eval-set tooltrajectory-basic
 
-# 工具轨迹评测
-cd examples/evaluation/tooltrajectory
-go run main.go -eval-set tooltrajectory-basic
+# 换后端
+cd examples/evaluation/inmemory && go run .
+cd examples/evaluation/mysql    && go run . -dsn "..."
 
-# Prompt 迭代优化（同步模式）
-cd examples/evaluation/promptiter/syncrun
-go run main.go -max-rounds 4
-```
-
-预期输出包含每个测试用例的评测状态和分数：
-
-```
-Case calc_add -> PASSED
-  Metric tool_trajectory_avg_score: score 1.00 (threshold 1.00) => PASSED
+# 高阶
+cd examples/evaluation/promptiter/syncrun && go run . -max-rounds 4
 ```
 
 ## 总结
 
-tRPC-Agent-Go 的评测框架提供了从简单断言到复杂多轮对话评测的完整方案。关键收获：
+评测系统的设计精髓在于**解耦**：同一套 `evaluation.New` 接口，存储侧可换 inmemory/local/mysql，准则侧可换 ROUGE/LLM 裁判/工具轨迹，裁判侧可注入 Runner 或写死 JSON，触发侧可走 CLI/HTTP/Langfuse。理解了 [`local`](./evaluation-local.md) 的骨架，其它示例都是在这个骨架上替换组件——最终在 [`promptiter`](./evaluation-promptiter.md) 里，评测本身又成了自动优化的目标函数，形成"度量 → 分析 → 改进"的完整闭环。
 
-- **统一接口**：所有评测维度共享相同的 Manager/Evaluator 抽象，便于组合使用
-- **可扩展性**：通过 `registry` 机制可注册自定义评测器，适配任意业务场景
-- **存储无关**：支持内存、本地文件、MySQL 等多种存储后端，灵活适配开发和生产环境
-- **自动化闭环**：`promptiter` 子模块实现了评测驱动的 Prompt 自动优化，形成"评测-分析-优化"闭环
-
-该模块与"进化篇"的 Evolution 功能互为补充：评测框架提供质量度量，Evolution 提供自动改进能力。
+评测系统与 [`session`](../07-session-management/session.md) 紧密配合：Session 维护单次会话上下文，评测负责对 Agent 在这些上下文中的表现打分。生产环境建议组合使用。
