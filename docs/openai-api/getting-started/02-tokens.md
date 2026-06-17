@@ -81,7 +81,7 @@ OpenAI 的价格表是「**每 100 万 token 多少美元**」，而且输入和
 
 每个模型有**上下文窗口**大小限制，比如 128000 token（即 128k）。你的 `prompt_tokens` + `completion_tokens` **总和不能超过这个数**。
 
-多轮对话越聊越长，`messages` 越塞越多，最终会撞上限——这时要么删旧消息、要么换更大窗口的模型。
+多轮对话越聊越长，`messages` 越塞越多，最终会撞上限——这时要么删旧消息、要么换更大窗口的模型。（这一节的后面会专门讲 context window 的细节。）
 
 ## max_tokens 参数：给输出上把锁
 
@@ -162,8 +162,160 @@ curl https://api.openai.com/v1/chat/completions \
 也就是说，模型可能「想」了很久（消耗大量 reasoning token），导致真正输出给你的可见文字比预期少得多。给推理模型设这个值时，要留得更宽松。
 :::
 
+## Context window：不是参数，是模型的「容量」
+
+很多人会找 `max_context_window` 这个参数——**它不存在**。Context window（上下文窗口）是模型的**固有属性**，就像杯子的容量，出厂就定了，你在请求里改不了。
+
+API 里所有「能控制 token 数」的参数，**只有 `max_tokens` / `max_completion_tokens` 这一个**（管输出上限）。输入侧、总量侧都没有对应的调节参数。
+
+### 各模型的容量（以官网为准）
+
+| 模型 | Context window | 最大输出 |
+|------|---------------|---------|
+| `gpt-4o` | 128,000 | 16,384 |
+| `gpt-4o-mini` | 128,000 | 16,384 |
+| `gpt-3.5-turbo` | 16,385 | 4,096 |
+| `o1` | 200,000 | 100,000 |
+| `o3` | 200,000 | 100,000 |
+
+::: tip 两个不同的数字
+注意上表有**两列**——「context window」是总容量（输入+输出共享），「最大输出」是单次回答能生成的上限。它们是**两个独立**的约束，别混了。
+:::
+
+### 硬性约束：输入 + 输出 ≤ context window
+
+一次调用能塞进多少，遵循这个关系：
+
+```
+prompt_tokens + completion_tokens  ≤  context_window
+                                       （模型固有属性）
+```
+
+也就是说：
+- 输入 `messages` 越长，留给输出的空间越小
+- 你设的 `max_tokens` 既不能超过「最大输出」，也不能超过「context_window − prompt_tokens」
+- **塞不下会怎样**：请求会被 API 直接拒绝（报错），告诉你超过了最大上下文长度。注意这跟 `finish_reason: length`（被 max_tokens 截断）是**两回事**——一个是请求阶段就拒了，一个是生成阶段被截了。
+
+### 多轮对话为什么会「撑爆」
+
+因为 API 无状态（[上一节](./01-messages-intro.md) 讲过），每轮都要把**全部历史**发回去。对话越长，`prompt_tokens` 越大，迟早撞上 context window。应对办法：
+
+1. **删旧消息**：只保留最近几轮，丢掉早期历史
+2. **摘要压缩**：用模型把旧对话总结成一段，替代原始消息
+3. **换大窗口模型**：如从 `gpt-4o`（128k）换到 `o1`（200k）
+
+## 其他 token 相关参数
+
+除了 `max_tokens`，还有几个参数和 token 有关。它们**不改变**生成结果，只是「观察」或「统计」token。
+
+### stream_options：流式时拿 token 用量
+
+还记得 `stream: true` 时，回答是一段段推送的吗？默认情况下，**流式响应不返回 `usage` 字段**——你不知道总共用了多少 token。
+
+设 `stream_options: {"include_usage": true}`，API 会在 `data: [DONE]` **之前**额外推一个 chunk，里面带完整的 `usage`：
+
+```bash
+curl https://api.openai.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "讲个笑话"}],
+    "stream": true,
+    "stream_options": {"include_usage": true}
+  }'
+```
+
+这是**流式模式下获取 token 用量的唯一方式**。注意这个最终 chunk 的 `choices` 是空数组，`usage` 才有值。
+
+::: warning 小坑
+如果流式中途被打断（网络断、超时），你可能收不到这个最终的 usage chunk。
+:::
+
+### logprobs / top_logprobs：看模型「差点选了什么」
+
+这两个参数让你**偷看模型在每个位置的概率分布**——也就是除了最终选的词，它还考虑了哪些备选词、各自概率多少。
+
+- `logprobs: true` —— 返回每个输出 token 的对数概率（log probability）
+- `top_logprobs: 5` —— 额外返回每个位置概率最高的 5 个候选 token（范围 0~20，需配合 `logprobs: true`）
+
+```bash
+curl https://api.openai.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "messages": [{"role": "user", "content": "天空是"}],
+    "logprobs": true,
+    "top_logprobs": 3
+  }'
+```
+
+返回里每个 token 会带类似这样的信息：
+
+```json
+{
+  "token": " 蓝",
+  "logprob": -0.0158,
+  "top_logprobs": [
+    {"token": " 蓝",  "logprob": -0.0158},
+    {"token": " 蓝",  "logprob": -3.12},
+    {"token": " 紫",  "logprob": -4.56}
+  ]
+}
+```
+
+::: tip 什么时候用得上
+这是**只读观察**工具，不改生成结果。用途：评估模型置信度、做 A/B 对比、调试模型「为什么这么说」。入门阶段用不到，知道有这东西即可。
+:::
+
+## 怎么提前算 token 数
+
+有时你想**在发请求之前**就知道大概要用多少 token（估算成本、避免超长报错）。有两条路：
+
+### 方法一：tiktoken（离线估算，只算文本）
+
+OpenAI 官方的 Python 库 [`tiktoken`](https://github.com/openai/tiktoken)，本地算文本的 token 数，不耗 API 额度：
+
+```bash
+pip install tiktoken
+```
+
+```python
+import tiktoken
+enc = tiktoken.encoding_for_model("gpt-4o")
+print(len(enc.encode("我喜欢猫")))   # 输出 token 数
+```
+
+::: warning 局限
+tiktoken 只能算**纯文本**。图片、文件、工具声明（tools schema）、消息格式化（role 字段等）这些占的 token 它算不准。复杂场景得用下面的方法二。
+:::
+
+### 方法二：input_tokens 端点（精确，但要调 API）
+
+OpenAI 提供了一个专门算 token 数的端点，接受和正式请求一样的输入，返回精确计数：
+
+```bash
+curl https://api.openai.com/v1/responses/input_tokens \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o-mini",
+    "input": [{"role": "user", "content": "我喜欢猫"}]
+  }'
+```
+
+返回 `{"input_tokens": 6, "object": "response.input_tokens"}`。
+
+::: tip 两个方法怎么选
+- 只算文本、想离线快速估算 → **tiktoken**
+- 有图片/文件/工具、要精确数 → **input_tokens 端点**（注意它属于 Responses API，不是 Chat Completions；Chat Completions 没有对应的计数端点）
+:::
+
 ## 动手实验
 
 1. **中英对比**：发两段意思相同的话，一段纯英文（如 "I like cats"）、一段纯中文（如 "我喜欢猫"），对比返回的 `prompt_tokens` 差异。你会直观看到中文更贵。
 2. **截断实验**：问一个长问题（如"详细介绍太阳系"），设 `max_tokens: 10`，看回答被生硬截断、`finish_reason` 变成 `length`。
+3. **流式拿用量**：加 `stream: true` 和 `stream_options: {"include_usage": true}`，用 `curl --no-buffer` 看 `data: [DONE]` 前那个带 `usage` 的 chunk。
+4. **离线算 token**：用 tiktoken 算一段你准备发的 messages 文本，再实际发请求对比 `prompt_tokens`，感受 tiktoken 估算和实际的差距。
 
