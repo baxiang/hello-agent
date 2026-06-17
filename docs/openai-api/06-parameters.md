@@ -1,6 +1,16 @@
 # 参数全解
 
+> **进阶篇压轴。** [入门篇 03](./getting-started/03-core-params.md) 你学了 9 个常用参数。本节把 Chat Completions API 的 **全部 25+ 参数**逐一列清——作为**查阅手册**用，不用一次读完。
+>
+> **本节你将学到**：必填参数、Token 控制、采样控制、推理控制、输出格式、流式选项、服务分级、缓存与元数据、安全筛选。最后一张场景速查表。
+>
+> **怎么用这节**：收藏，写代码时按需查。每个参数都标了类型、默认值、适用场景。
+
 OpenAI Chat Completions API 的完整参数清单——25+ 参数逐一详解。
+
+::: tip 参数全景图
+所有参数分 7 组：**必填**（model/messages）→ **Token 控制**（max_tokens 等）→ **采样**（temperature/top_p/penalty）→ **推理**（reasoning_effort）→ **输出**（response_format/n/modalities）→ **流式**（stream/stream_options）→ **运营**（service_tier/store/user）。前面入门篇覆盖了前 3 组常用的，这里补全后 4 组和细节。
+:::
 
 ## 1. 必填参数
 
@@ -412,3 +422,35 @@ JSON Schema 输出     0       —     1000        42    0         0         关
 多轮 Agent 对话      0.7     —     2000        —     0         0         关闭
 批处理(低成本)       0.3     —     1000        —     0         0         — (service_tier:flex)
 ```
+
+## 动手实验
+
+1. **场景对照**：拿上面速查表里的 3 个场景（代码生成 / 创意写作 / JSON 输出），用对应的参数组合各发一次请求，对比返回风格。
+2. **service_tier**：发两个请求分别带 `"service_tier": "flex"` 和 `"default"`（需账户支持 flex），看延迟和价格的差异。
+3. **reasoning_effort**：用 `o3-mini` 分别设 `low` / `high`，看回答质量、耗时、`usage.completion_tokens_details.reasoning_tokens` 的差异。
+4. **参数互斥**：同时设 `temperature: 0.7` 和 `top_p: 0.5`，看 API 是否警告（官方建议二选一，但不报错）。
+5. **logprobs 玩概率**：设 `logprobs: true` + `top_logprobs: 3`，发"天空是___"，看模型在每个位置的 top 3 候选词及概率。
+
+## 入门 → 进阶 完整闭环
+
+恭喜——到这里你已经过完了 OpenAI API 协议的全部核心内容。回顾整条学习路径：
+
+| 阶段 | 内容 |
+|------|------|
+| [入门 00](./getting-started/00-first-call.md) | 第一次调用、读响应 |
+| [入门 01](./getting-started/01-messages-intro.md) | messages 三角色 |
+| [入门 02](./getting-started/02-tokens.md) | token、max_tokens、context window |
+| [入门 03](./getting-started/03-core-params.md) | 9 个常用参数 |
+| [协议总览](./00-overview.md) | 协议地图、行业标准 |
+| [Messages](./01-messages.md) | 五角色全解 |
+| [响应格式](./02-response.md) | 响应全字段 |
+| [流式 SSE](./03-streaming.md) | delta 拼接 |
+| [Function Calling](./04-function-calling.md) | 工具调用、Agent 循环 |
+| [多模态](./05-multimodal.md) | 图片/音频/文件 |
+| [参数全解](./06-parameters.md)（本节）| 25+ 参数手册 |
+
+接下来推荐：
+
+- [工程实践 · DeepSeek](./07-deepseek.md) 起 —— 换国产模型省钱
+- 各 Agent 框架文档（ADK-Go / LangChain / OpenAI Agents SDK）—— 把协议层知识用来理解框架内部
+- [MCP 协议](../mcp/) —— Function Calling 之上的工具调用标准

@@ -1,8 +1,24 @@
 # Messages 消息系统
 
+> **进阶篇第二节。** [入门篇 01](./getting-started/01-messages-intro.md) 你学过三种基本角色（system/user/assistant）和「把历史塞回去」。本节把 messages 数组讲透：**全部五种角色**、content 的多模态格式、消息顺序的硬规则、assistant 的特殊字段（refusal/tool_calls/audio）、prompt caching。
+>
+> **本节你将学到**：写出合法且健壮的 messages 数组——这是所有 Agent 框架拼装请求的核心环节。
+>
+> **一句话比喻**：messages 像一份**剧本**，每个角色按固定顺序登场、各司其职；顺序错了戏就演不下去。
+
 Messages 是 Chat Completions API 的唯一数据结构——有序的消息列表，承载全部对话上下文。
 
+::: tip 先记住一个心智模型
+把 messages 数组想成**一摞有序的卡片**，每张卡片写明「谁说的（role）+ 说了什么（content）」。OpenAI 服务器每次只看这一摞卡片，看完就忘——所以每次请求都要把完整对话历史重新发一遍（[入门篇](./getting-started/01-messages-intro.md) 讲过的「无状态」）。
+:::
+
 ## 1. 五种 Role
+
+::: tip 五角色一图记
+按「谁说了算」分两层：
+- **指令层**（定调）：`developer`（新）/ `system`（旧）—— 开发者给模型的人设
+- **对话层**（内容）：`user`（用户）/ `assistant`（模型）/ `tool`（工具结果）
+:::
 
 ### developer（推荐替代 system）
 
@@ -301,3 +317,21 @@ type LLMRequest struct {
 // genai.Content with Role="model" → {"role": "assistant", "content": ...}
 // genai.Content with Parts containing FunctionResponse → {"role": "tool", ...}
 ```
+
+## 动手实验
+
+1. **触发顺序错误**：构造一个 `[user, user]` 连续两条 user 的请求，看 API 返回什么错误信息（通常是 400 + `unreadable messages`）。
+2. **体验 prompt caching**：连续发两个请求，第二个共享第一个的 system prompt + 前几条消息，对比返回的 `usage.prompt_tokens_details.cached_tokens`——第二次会大于 0。
+3. **refusal 观察**：发一个明确违反安全策略的问题（如"怎么黑入别人的账号"），看返回的 `assistant.refusal` 字段和 `content: null`。
+4. **多模态 content**：发一个 `content` 为数组（text + image_url）的请求，亲眼看模型同时处理文字和图片。
+5. **历史裁剪**：写个脚本累计 20 轮对话后用 [Token 篇](./getting-started/02-tokens.md) 的 tiktoken 估算，超出阈值就删早期消息，保持循环不爆。
+
+## 本节速查 / 接下来
+
+**5 个要点**：五种 role（developer/system/user/assistant/tool）、顺序规则（user 起头、assistant 与 tool 交替、不能连续）、content 可字符串也可数组（多模态）、assistant 三特殊字段（refusal/tool_calls/audio）、prompt caching 自动命中省 50%。
+
+接下来：
+
+- [响应格式](./02-response.md) —— messages 发出去，模型返回什么
+- [Function Calling 机制](./04-function-calling.md) —— assistant 的 tool_calls 字段深入
+- [多模态](./05-multimodal.md) —— image_url / input_audio / file 的完整玩法

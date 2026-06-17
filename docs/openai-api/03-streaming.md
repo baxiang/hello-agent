@@ -1,5 +1,11 @@
 # 流式协议 (SSE)
 
+> **进阶篇第四节。** [入门篇 03](./getting-started/03-core-params.md#stream-流式输出-高频) 你试过 `"stream": true`——字一个个冒出来。本节讲它背后的协议：SSE（Server-Sent Events）长什么样、delta 怎么拼接、`[DONE]` 怎么处理、流式中途断了怎么办。
+>
+> **本节你将学到**：SSE chunk 格式、delta 的几种类型（content / tool_calls / reasoning）、跨语言对比、错误恢复。
+>
+> **一句话比喻**：非流式像**寄包裹**（生成完一次性寄出），流式像**打电话**（边说边听）——首字延迟低，但你要会「边接边拼」。
+
 ## 1. 开启流式
 
 ```json
@@ -328,3 +334,17 @@ data: [DONE]
 | 推理 | `delta.reasoning_content` | `thinking_delta.thinking` | `thought` |
 | 结束信号 | `data: [DONE]` | `event: message_stop` | `data: [DONE]` |
 | usage 时机 | 最后一个 chunk（需 opt-in） | `message_delta` 事件 | 最后一个 chunk |
+
+## 动手实验
+
+1. **裸眼看 SSE**：用 `curl -N https://api.openai.com/v1/chat/completions ... -d '{"stream":true,...}'`，直接看终端一行行输出的 `data: {...}` 原始格式，不用任何解析库。
+2. **拼接 delta**：写个 Python 脚本用 `requests` + `stream=True`，逐行读 `data:`，累加 `delta.content`，最后打印完整文本——体会「边收边拼」。
+3. **拿 usage**：加 `stream_options: {"include_usage": true}`，找到 `data: [DONE]` 之前那个 `choices` 为空、`usage` 有值的 chunk。
+4. **断流模拟**：在拼接脚本里读到一半 `break` 退出，看你会拿到半截文本——理解为什么生产代码要处理「流被中途打断」。
+5. **流式 tool call**：参考 [Function Calling §9](./04-function-calling.md#_9-流式-function-calling)，跑一个流式工具调用，体验按 `index` 拼装 `arguments` 的复杂度。
+
+## 接下来
+
+- [Function Calling 机制](./04-function-calling.md) —— 流式下 tool_calls 怎么拼装的完整说明
+- [多模态](./05-multimodal.md) —— 流式下音频输出的特殊处理
+- [Token 计费](./getting-started/02-tokens.md) —— 流式下怎么拿 token 用量（`include_usage`）

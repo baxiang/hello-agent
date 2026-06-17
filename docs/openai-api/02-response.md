@@ -1,6 +1,18 @@
 # 响应格式
 
+> **进阶篇第三节。** [入门篇 00](./getting-started/00-first-call.md) 你会看 `choices[0].message.content` 拿答案，但响应里那一大堆字段（`finish_reason`、`usage`、`service_tier`、`system_fingerprint`、`logprobs`……）你都没动过。本节把它们逐层拆开。
+>
+> **本节你将学到**：响应顶层结构、三种互斥的输出模式（content / refusal / tool_calls）、`finish_reason` 决定后续处理、usage 子结构、错误处理模式。
+>
+> **一句话比喻**：响应像一份**快递单**——`choices` 是商品（你要的答案），`usage` 是运费（花了多少 token），`finish_reason` 是签收状态（正常签收 / 截断 / 退回）。
+
 Chat Completions API 的响应承载了模型生成的全部内容——从文本到工具调用、从 token 用量到完成原因。理解每个字段的含义、出现条件及字段间的互斥关系，是正确解析响应、处理异常和优化成本的前提。
+
+::: tip 读完本节你能做到
+- 看一眼响应就知道**该取哪个字段**（content？refusal？tool_calls？）
+- 根据 `finish_reason` 决定**下一步**（结束？续写？执行工具？）
+- 根据 `usage` **算清账**（哪些打了折、哪些是推理消耗）
+:::
 
 > 本文基于 OpenAI API 最新规范，对每个字段做逐层拆解。
 
@@ -810,3 +822,19 @@ def parse_chat_completion(response):
 | Token 用量 | `cached_tokens` 享受 50% 折扣，`reasoning_tokens` 另计 |
 | 错误处理 | 优先区分 HTTP 状态码，再按 `error.code` 分类重试策略 |
 | `system_fingerprint` | 输出不一致时的根因分析利器，建议日志记录 |
+
+---
+
+## 动手实验
+
+1. **三种 finish_reason**：分别构造请求触发 `stop`（正常问）、`length`（设 `max_tokens: 5` 问长问题）、`tool_calls`（带 tools 声明问可调用问题），对比响应。
+2. **usage 全字段观察**：发一个请求，用 `python -m json.tool` 格式化输出，找全 `prompt_tokens_details.cached_tokens`、`completion_tokens_details.reasoning_tokens` 等子字段（非推理模型 reasoning_tokens 为 0）。
+3. **refusal 触发**：问一个明显违规的问题，看 `choices[0].message.refusal` 字段填充、`content` 为 null。
+4. **system_fingerprint 一致性**：同一份请求连发 3 次，对比 `system_fingerprint` 是否变化——如果变了，说明后端升级过，可能影响复现性。
+5. **错误码识别**：故意把 API key 改错（401）、把 URL 改错（404）、发一个超大 messages（看是否触发 context 超限），对照 HTTP 状态码和 `error.code`。
+
+## 接下来
+
+- [流式协议 (SSE)](./03-streaming.md) —— 非流式响应是一坨 JSON，流式响应怎么变成一段段 delta
+- [Function Calling 机制](./04-function-calling.md) —— 当 `finish_reason=tool_calls` 时，完整工具调用循环怎么走
+- [Token 计费](./getting-started/02-tokens.md) —— `usage` 字段每个子项的计费含义

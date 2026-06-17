@@ -1,6 +1,16 @@
 # 多模态输入与输出
 
+> **进阶篇第五节。** [入门篇](./getting-started/00-first-call.md) 全程是纯文本。本节讲怎么把**图片、音频、文件**塞进 messages——以及让模型**输出音频**。
+>
+> **本节你将学到**：Vision（图片输入，含 detail 等级与 token 估算）、Audio 输入与输出、File 上传、各模态的计费特点、模型支持矩阵。
+>
+> **一句话比喻**：之前模型只会读文字（盲人摸象），多模态让它**能看图、能听声、能说话**——但每种模态都要用对应的 `content` 类型声明。
+
 OpenAI API 在 `v1/chat/completions` 中统一支持文本、图片、音频的输入和输出。
+
+::: tip 多模态的本质
+就是 [messages 数组](./01-messages.md) 里 `content` 字段不再只是字符串，而变成**数组**——数组里可以混搭 `text` / `image_url` / `input_audio` / `file` 多种类型。模型按顺序读，每种类型它用对应的「感官」处理。
+:::
 
 ## 1. Vision：图片输入
 
@@ -260,3 +270,17 @@ curl https://api.openai.com/v1/images/generations \
 | o1 / o3-mini | ✅ | ✅ | ❌ | ❌ |
 | o4-mini | ✅ | ✅ | ❌ | ❌ |
 | gpt-4.1 | ✅ | ✅ | ❌ | ❌ |
+
+## 动手实验
+
+1. **图片识别**：找一张含文字的图片（如菜单截图），用 `image_url` 让模型「读出菜单和价格」，体验 detail 参数对识别精度的影响（low vs high）。
+2. **base64 本地图**：把本地一张 jpg 转成 base64（`base64 image.jpg | tr -d '\n'`），用 `data:image/jpeg;base64,...` 格式发送——体会不用图床也能传图。
+3. **token 估算对比**：发同一张图，分别用 `detail: low` 和 `detail: high`，对比返回的 `usage.prompt_tokens` 差异（high 通常贵很多）。
+4. **文件上传**：用 `POST /v1/files` 上传一个 PDF，拿到 `file_id`，再在 messages 里用 `file` 类型引用，让模型总结文档。
+5. **音频输出**：用 `gpt-4o-audio-preview` + `modalities: ["text","audio"]` + `audio: {voice, format}`，让模型「说话」，把返回的 base64 音频存成 wav 播放。
+
+## 接下来
+
+- [参数全解](./06-parameters.md) —— `modalities`、`audio`、`prediction` 等多模态相关参数的完整说明
+- [Messages 消息系统](./01-messages.md) —— content 数组结构的完整规则
+- [Token 计费](./getting-started/02-tokens.md) —— 图片/音频 token 怎么算的
