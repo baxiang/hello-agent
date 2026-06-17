@@ -568,6 +568,217 @@ export default withMermaid({
             { text: 'AG-UI 协议', link: '/trpc-agent-go/16-agui' },
             { text: 'A2A 协议', link: '/trpc-agent-go/17-a2a' },
           ]
+        },
+        {
+          text: '示例教程',
+          link: '/trpc-agent-go/examples/',
+          items: [
+            {
+              text: '01 - Agent 基础',
+              collapsed: true,
+              items: [
+                { text: 'LLM Agent 入门', link: '/trpc-agent-go/examples/01-agent-basics/llmagent' },
+                { text: '自定义 Agent', link: '/trpc-agent-go/examples/01-agent-basics/customagent' },
+                { text: '调试 Agent', link: '/trpc-agent-go/examples/01-agent-basics/debugagent' },
+                { text: 'Runner 运行器', link: '/trpc-agent-go/examples/01-agent-basics/runner' },
+                { text: '托管 Runner', link: '/trpc-agent-go/examples/01-agent-basics/managedrunner' },
+                { text: '取消运行', link: '/trpc-agent-go/examples/01-agent-basics/cancelrun' },
+                { text: '消息运行', link: '/trpc-agent-go/examples/01-agent-basics/runwithmessages' },
+                { text: 'Ralph 循环', link: '/trpc-agent-go/examples/01-agent-basics/ralphloop' },
+              ]
+            },
+            {
+              text: '02 - 工具系统',
+              collapsed: true,
+              items: [
+                { text: '工具基础', link: '/trpc-agent-go/examples/02-tool-system/tool' },
+                { text: '多工具', link: '/trpc-agent-go/examples/02-tool-system/multitools' },
+                { text: 'Agent 工具', link: '/trpc-agent-go/examples/02-tool-system/agenttool' },
+                { text: '动态 Agent 工具', link: '/trpc-agent-go/examples/02-tool-system/dynamicagenttool' },
+                { text: '工具调用 ID', link: '/trpc-agent-go/examples/02-tool-system/toolcallid' },
+                { text: '工具过滤', link: '/trpc-agent-go/examples/02-tool-system/toolfilter' },
+                { text: '工具中断', link: '/trpc-agent-go/examples/02-tool-system/toolinterrupt' },
+                { text: '工具管道', link: '/trpc-agent-go/examples/02-tool-system/toolpipe' },
+                { text: '工具策略', link: '/trpc-agent-go/examples/02-tool-system/toolpolicy' },
+                { text: 'OpenAPI 工具', link: '/trpc-agent-go/examples/02-tool-system/openapitool' },
+                { text: '工具调用重试', link: '/trpc-agent-go/examples/02-tool-system/llmagent_tool_call_retry' },
+              ]
+            },
+            {
+              text: '03 - MCP 工具',
+              collapsed: true,
+              items: [
+                { text: 'MCP 工具集成', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool' },
+                { text: 'MCP Broker', link: '/trpc-agent-go/examples/03-mcp-tools/mcpbroker' },
+              ]
+            },
+            {
+              text: '04 - Graph 工作流',
+              collapsed: true,
+              items: [
+                { text: 'Graph 工作流', link: '/trpc-agent-go/examples/04-graph-workflow/graph' },
+              ]
+            },
+            {
+              text: '05 - 多 Agent 协作',
+              collapsed: true,
+              items: [
+                { text: '多 Agent 编排', link: '/trpc-agent-go/examples/05-multi-agent/multiagent' },
+                { text: 'Team 协作', link: '/trpc-agent-go/examples/05-multi-agent/team' },
+                { text: 'Agent 转移', link: '/trpc-agent-go/examples/05-multi-agent/transfer' },
+              ]
+            },
+            {
+              text: '06 - Memory 系统',
+              collapsed: true,
+              items: [
+                { text: 'Memory 系统', link: '/trpc-agent-go/examples/06-memory-system/memory' },
+              ]
+            },
+            {
+              text: '07 - Session 管理',
+              collapsed: true,
+              items: [
+                { text: 'Session 管理', link: '/trpc-agent-go/examples/07-session-management/session' },
+              ]
+            },
+            {
+              text: '08 - Agent Skills',
+              collapsed: true,
+              items: [
+                { text: 'Skill 基础', link: '/trpc-agent-go/examples/08-agent-skills/skill' },
+                { text: '动态 Schema', link: '/trpc-agent-go/examples/08-agent-skills/skilldynamicschema' },
+                { text: 'Skill 发现', link: '/trpc-agent-go/examples/08-agent-skills/skillfind' },
+                { text: 'Skill 隔离', link: '/trpc-agent-go/examples/08-agent-skills/skillisolation' },
+                { text: 'Skill 加载模式', link: '/trpc-agent-go/examples/08-agent-skills/skillloadmode' },
+                { text: 'Skill 运行', link: '/trpc-agent-go/examples/08-agent-skills/skillrun' },
+                { text: 'Skill 工具激活', link: '/trpc-agent-go/examples/08-agent-skills/skilltoolactivation' },
+                { text: 'Skill 工具配置', link: '/trpc-agent-go/examples/08-agent-skills/skilltoolprofile' },
+                { text: '结构化输出 Skill', link: '/trpc-agent-go/examples/08-agent-skills/structuredoutputskills' },
+              ]
+            },
+            {
+              text: '09 - A2A 协议',
+              collapsed: true,
+              items: [
+                { text: 'A2A ADK', link: '/trpc-agent-go/examples/09-a2a-protocol/a2aadk' },
+                { text: 'A2A Agent', link: '/trpc-agent-go/examples/09-a2a-protocol/a2aagent' },
+                { text: 'A2A 代码执行', link: '/trpc-agent-go/examples/09-a2a-protocol/a2acodeexecution' },
+                { text: 'A2A 多路径', link: '/trpc-agent-go/examples/09-a2a-protocol/a2amultipath' },
+                { text: 'A2A 子 Agent', link: '/trpc-agent-go/examples/09-a2a-protocol/a2asubagent' },
+              ]
+            },
+            {
+              text: '10 - AG-UI 协议',
+              collapsed: true,
+              items: [
+                { text: 'A2UI 协议', link: '/trpc-agent-go/examples/10-agui-protocol/a2ui' },
+                { text: 'AG-UI 协议', link: '/trpc-agent-go/examples/10-agui-protocol/agui' },
+              ]
+            },
+            {
+              text: '11 - 代码执行',
+              collapsed: true,
+              items: [
+                { text: '代码执行', link: '/trpc-agent-go/examples/11-code-execution/codeexecution' },
+                { text: '沙箱代码执行', link: '/trpc-agent-go/examples/11-code-execution/sandboxcodeexecution' },
+              ]
+            },
+            {
+              text: '12 - 知识检索 RAG',
+              collapsed: true,
+              items: [
+                { text: '知识库', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge' },
+                { text: 'ArXiv 搜索', link: '/trpc-agent-go/examples/12-knowledge-rag/arxivsearch' },
+                { text: 'Wiki 搜索', link: '/trpc-agent-go/examples/12-knowledge-rag/wiki' },
+                { text: 'WeKnora', link: '/trpc-agent-go/examples/12-knowledge-rag/weknora' },
+              ]
+            },
+            {
+              text: '13 - 模型与提供商',
+              collapsed: true,
+              items: [
+                { text: '模型配置', link: '/trpc-agent-go/examples/13-model-provider/model' },
+                { text: '提供商', link: '/trpc-agent-go/examples/13-model-provider/provider' },
+              ]
+            },
+            {
+              text: '14 - Prompt 与输出',
+              collapsed: true,
+              items: [
+                { text: 'Prompt 管理', link: '/trpc-agent-go/examples/14-prompt-output/prompt' },
+                { text: 'Prompt 缓存', link: '/trpc-agent-go/examples/14-prompt-output/promptcache' },
+                { text: '占位符', link: '/trpc-agent-go/examples/14-prompt-output/placeholder' },
+                { text: '结构化输出', link: '/trpc-agent-go/examples/14-prompt-output/structuredoutput' },
+                { text: '输出 Key', link: '/trpc-agent-go/examples/14-prompt-output/outputkey' },
+                { text: '输出 Key 状态', link: '/trpc-agent-go/examples/14-prompt-output/outputkeystate' },
+                { text: '输出 Schema', link: '/trpc-agent-go/examples/14-prompt-output/outputschema' },
+              ]
+            },
+            {
+              text: '15 - 评测与进化',
+              collapsed: true,
+              items: [
+                { text: '评测系统', link: '/trpc-agent-go/examples/15-evaluation/evaluation' },
+                { text: '进化优化', link: '/trpc-agent-go/examples/15-evaluation/evolution' },
+              ]
+            },
+            {
+              text: '16 - 可观测性',
+              collapsed: true,
+              items: [
+                { text: '遥测', link: '/trpc-agent-go/examples/16-observability/telemetry' },
+                { text: 'Token 追踪', link: '/trpc-agent-go/examples/16-observability/tokentracker' },
+                { text: '回调系统', link: '/trpc-agent-go/examples/16-observability/callbacks' },
+              ]
+            },
+            {
+              text: '17 - 安全防护',
+              collapsed: true,
+              items: [
+                { text: 'Guardrail 防护', link: '/trpc-agent-go/examples/17-safety-guardrails/guardrail' },
+                { text: '人机协作', link: '/trpc-agent-go/examples/17-safety-guardrails/humaninloop' },
+                { text: '任务强制', link: '/trpc-agent-go/examples/17-safety-guardrails/todoenforcer' },
+              ]
+            },
+            {
+              text: '18 - 搜索与外部集成',
+              collapsed: true,
+              items: [
+                { text: 'DuckDuckGo 搜索', link: '/trpc-agent-go/examples/18-search-integration/duckduckgo' },
+                { text: 'Google 搜索', link: '/trpc-agent-go/examples/18-search-integration/google' },
+                { text: 'Dify 集成', link: '/trpc-agent-go/examples/18-search-integration/dify' },
+                { text: 'n8n 集成', link: '/trpc-agent-go/examples/18-search-integration/n8n' },
+                { text: 'Claude Code', link: '/trpc-agent-go/examples/18-search-integration/claudecode' },
+                { text: 'Codex', link: '/trpc-agent-go/examples/18-search-integration/codex' },
+                { text: 'Email', link: '/trpc-agent-go/examples/18-search-integration/email' },
+                { text: 'OpenAI Server', link: '/trpc-agent-go/examples/18-search-integration/openaiserver' },
+              ]
+            },
+            {
+              text: '19 - 高级特性',
+              collapsed: true,
+              items: [
+                { text: '上下文压缩', link: '/trpc-agent-go/examples/19-advanced-features/context_compaction' },
+                { text: '压缩恢复', link: '/trpc-agent-go/examples/19-advanced-features/context_compaction_recovery' },
+                { text: '引导控制', link: '/trpc-agent-go/examples/19-advanced-features/steer' },
+                { text: '思考模式', link: '/trpc-agent-go/examples/19-advanced-features/thinking' },
+                { text: '时间感知', link: '/trpc-agent-go/examples/19-advanced-features/timeaware' },
+                { text: '摘要', link: '/trpc-agent-go/examples/19-advanced-features/summary' },
+                { text: '裁剪', link: '/trpc-agent-go/examples/19-advanced-features/tailor' },
+                { text: 'ReAct 推理', link: '/trpc-agent-go/examples/19-advanced-features/react' },
+                { text: '限制配置', link: '/trpc-agent-go/examples/19-advanced-features/max_limits' },
+                { text: '文件输入', link: '/trpc-agent-go/examples/19-advanced-features/fileinput' },
+                { text: '工作空间 IO', link: '/trpc-agent-go/examples/19-advanced-features/workspace_io' },
+                { text: '内置浏览器', link: '/trpc-agent-go/examples/19-advanced-features/builtinexplorer' },
+                { text: '消息重写', link: '/trpc-agent-go/examples/19-advanced-features/usermessagerewriter' },
+                { text: '插件系统', link: '/trpc-agent-go/examples/19-advanced-features/plugin' },
+                { text: '任务运行', link: '/trpc-agent-go/examples/19-advanced-features/taskrun' },
+                { text: 'Todo', link: '/trpc-agent-go/examples/19-advanced-features/todo' },
+                { text: 'Artifact', link: '/trpc-agent-go/examples/19-advanced-features/artifact' },
+              ]
+            },
+          ]
         }
       ],
       '/go-iterators/': [
