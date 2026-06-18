@@ -3,7 +3,7 @@
 > **源码路径**：[`trpc-agent-go/examples/`](../../../../trpc-agent-go/examples)（本分类覆盖 llmagent/customagent/debugagent）
 > **本页**：分类索引 + 深度原理（源自原 01-agent.md）
 >
-> Runner 相关内容已独立为 [`runner-executor`](../runner-executor/) 分类。
+> Runner 相关内容已独立为 [`runner-executor`](../00-runner-executor/) 分类。
 
 ## 子示例导航
 
@@ -22,7 +22,7 @@
 └── Agent 需要操作文件、执行代码       → debugagent（ToolSet + CodeExecutor）
 ```
 
-> 运行时基础设施（Runner/ManagedRunner/取消/历史注入/外循环）见 [`runner-executor`](../runner-executor/) 分类。
+> 运行时基础设施（Runner/ManagedRunner/取消/历史注入/外循环）见 [`runner-executor`](../00-runner-executor/) 分类。
 
 ## 核心概念
 
@@ -219,7 +219,7 @@ tRPC-Agent-Go 选择 channel 是因为：
 - UI 层可据此渲染嵌套 Agent 调用链
 - 避免大对象复制带来的开销与一致性麻烦
 
-> Runner 相关的设计哲学（为什么 Runner 不属于 Agent 接口、Completion 事件、Ralph Loop vs CycleAgent、取消与清理）见 [`runner-executor` 深度原理](../runner-executor/index.md#设计哲学)。
+> Runner 相关的设计哲学（为什么 Runner 不属于 Agent 接口、Completion 事件、Ralph Loop vs CycleAgent、取消与清理）见 [`runner-executor` 深度原理](../00-runner-executor/index.md#设计哲学)。
 
 ### 配置速查
 
@@ -245,7 +245,7 @@ tRPC-Agent-Go 选择 channel 是因为：
 | `WithCodeExecutor(e)` | 代码执行器（Skills） | nil |
 | `WithAgentCallbacks(c)` | Agent 级别回调 | nil |
 
-> Runner 配置见 [`runner-executor` 配置速查](../runner-executor/index.md#配置速查)。
+> Runner 配置见 [`runner-executor` 配置速查](../00-runner-executor/index.md#配置速查)。
 
 ## 学习路径建议
 
@@ -254,7 +254,7 @@ tRPC-Agent-Go 选择 channel 是因为：
    - 想完全自定义 → [`customagent`](./customagent.md)
    - Agent 要操作文件/代码 → [`debugagent`](./debugagent.md)
 3. **回到本页「深度原理」节**：在跑通示例后重读接口签名与设计哲学，理解"为什么这么设计"
-4. **继续学习运行时基础设施**：→ [`runner-executor`](../runner-executor/) 分类（Runner/ManagedRunner/取消/外循环）
+4. **继续学习运行时基础设施**：→ [`runner-executor`](../00-runner-executor/) 分类（Runner/ManagedRunner/取消/外循环）
 
 ## 总结
 
@@ -262,11 +262,11 @@ Agent 基础分类的设计精髓在于**接口极简、扩展靠注入**：
 
 - **Agent 接口**只有 4 个方法，所有扩展（工具、子 Agent、回调、安全限制）通过 `Invocation` 和 functional options 注入
 - **channel 事件流**贯穿全栈：流式、并发安全、可组合，是 tRPC-Agent-Go 的核心抽象
-- **Agent 与 Runner 解耦**：Agent 只管逻辑，运行时基础设施由 [`runner-executor`](../runner-executor/) 分类覆盖
+- **Agent 与 Runner 解耦**：Agent 只管逻辑，运行时基础设施由 [`runner-executor`](../00-runner-executor/) 分类覆盖
 
 进一步学习：
 
-- 运行时基础设施：[`runner-executor`](../runner-executor/)
+- 运行时基础设施：[`runner-executor`](../00-runner-executor/)
 - 宏观架构与组件关系：[`18-architecture`](../../18-architecture.md) / [`19-diagrams`](../../19-diagrams.md)
 - 工具系统：[`02-tool-system`](../02-tool-system/)
 - 多 Agent 编排：[`05-multi-agent`](../05-multi-agent/)

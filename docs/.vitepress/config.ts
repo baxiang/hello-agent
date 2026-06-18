@@ -565,12 +565,12 @@ export default withMermaid({
               text: 'Runner 执行器',
               collapsed: true,
               items: [
-                { text: 'Runner 执行器（原理索引）', link: '/trpc-agent-go/examples/runner-executor/' },
-                { text: 'Runner 运行器', link: '/trpc-agent-go/examples/runner-executor/runner' },
-                { text: '托管 Runner', link: '/trpc-agent-go/examples/runner-executor/managedrunner' },
-                { text: '取消运行', link: '/trpc-agent-go/examples/runner-executor/cancelrun' },
-                { text: '消息运行', link: '/trpc-agent-go/examples/runner-executor/runwithmessages' },
-                { text: 'Ralph 循环', link: '/trpc-agent-go/examples/runner-executor/ralphloop' },
+                { text: 'Runner 执行器（原理索引）', link: '/trpc-agent-go/examples/00-runner-executor/' },
+                { text: 'Runner 运行器', link: '/trpc-agent-go/examples/00-runner-executor/runner' },
+                { text: '托管 Runner', link: '/trpc-agent-go/examples/00-runner-executor/managedrunner' },
+                { text: '取消运行', link: '/trpc-agent-go/examples/00-runner-executor/cancelrun' },
+                { text: '消息运行', link: '/trpc-agent-go/examples/00-runner-executor/runwithmessages' },
+                { text: 'Ralph 循环', link: '/trpc-agent-go/examples/00-runner-executor/ralphloop' },
               ]
             },
             {

@@ -4,6 +4,18 @@
 
 ## 目录
 
+### 00 - Runner 执行器
+
+`00-runner-executor/` 目录包含 5 个运行时基础设施子示例。详见 [Runner 索引页](00-runner-executor/index.md)。
+
+| 子示例 | 文章 | 说明 |
+|--------|------|------|
+| `runner` | [Runner 运行器](00-runner-executor/runner.md) | Runner 的配置与使用 |
+| `managedrunner` | [托管 Runner](00-runner-executor/managedrunner.md) | ManagedRunner 模式 |
+| `cancelrun` | [取消运行](00-runner-executor/cancelrun.md) | Context 取消与优雅退出 |
+| `runwithmessages` | [消息运行](00-runner-executor/runwithmessages.md) | 带历史消息运行 |
+| `ralphloop` | [Ralph 循环](00-runner-executor/ralphloop.md) | RALPH 交互循环 |
+
 ### 01 - Agent 基础
 
 | 示例 | 文章 | 说明 |
@@ -11,18 +23,6 @@
 | `llmagent` | [LLM Agent 入门](01-agent-basics/llmagent.md) | 最小可运行的 LLM Agent |
 | `customagent` | [自定义 Agent](01-agent-basics/customagent.md) | 实现 Agent 接口 |
 | `debugagent` | [调试 Agent](01-agent-basics/debugagent.md) | Agent 调试技巧 |
-
-### Runner 执行器
-
-`runner-executor/` 目录包含 5 个运行时基础设施子示例。详见 [Runner 索引页](runner-executor/index.md)。
-
-| 子示例 | 文章 | 说明 |
-|--------|------|------|
-| `runner` | [Runner 运行器](runner-executor/runner.md) | Runner 的配置与使用 |
-| `managedrunner` | [托管 Runner](runner-executor/managedrunner.md) | ManagedRunner 模式 |
-| `cancelrun` | [取消运行](runner-executor/cancelrun.md) | Context 取消与优雅退出 |
-| `runwithmessages` | [消息运行](runner-executor/runwithmessages.md) | 带历史消息运行 |
-| `ralphloop` | [Ralph 循环](runner-executor/ralphloop.md) | RALPH 交互循环 |
 
 ### 02 - 工具系统
 
