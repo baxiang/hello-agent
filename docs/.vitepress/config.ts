@@ -552,17 +552,7 @@ export default withMermaid({
           link: '/trpc-agent-go/examples/',
           items: [
             {
-              text: '01 - Agent 基础',
-              collapsed: true,
-              items: [
-                { text: 'Agent 基础（原理索引）', link: '/trpc-agent-go/examples/01-agent-basics/' },
-                { text: 'LLM Agent 入门', link: '/trpc-agent-go/examples/01-agent-basics/llmagent' },
-                { text: '自定义 Agent', link: '/trpc-agent-go/examples/01-agent-basics/customagent' },
-                { text: '调试 Agent', link: '/trpc-agent-go/examples/01-agent-basics/debugagent' },
-              ]
-            },
-            {
-              text: 'Runner 执行器',
+              text: '00 - Runner 执行器',
               collapsed: true,
               items: [
                 { text: 'Runner 执行器（原理索引）', link: '/trpc-agent-go/examples/00-runner-executor/' },
@@ -571,6 +561,16 @@ export default withMermaid({
                 { text: '取消运行', link: '/trpc-agent-go/examples/00-runner-executor/cancelrun' },
                 { text: '消息运行', link: '/trpc-agent-go/examples/00-runner-executor/runwithmessages' },
                 { text: 'Ralph 循环', link: '/trpc-agent-go/examples/00-runner-executor/ralphloop' },
+              ]
+            },
+            {
+              text: '01 - Agent 基础',
+              collapsed: true,
+              items: [
+                { text: 'Agent 基础（原理索引）', link: '/trpc-agent-go/examples/01-agent-basics/' },
+                { text: 'LLM Agent 入门', link: '/trpc-agent-go/examples/01-agent-basics/llmagent' },
+                { text: '自定义 Agent', link: '/trpc-agent-go/examples/01-agent-basics/customagent' },
+                { text: '调试 Agent', link: '/trpc-agent-go/examples/01-agent-basics/debugagent' },
               ]
             },
             {
