@@ -901,7 +901,7 @@ export default withMermaid({
             { text: '函数选项模式', link: '/trpc-agent-go/go-fundamentals/03-functional-options' },
             { text: 'Context 生命周期与取消', link: '/trpc-agent-go/go-fundamentals/04-context-lifecycle' },
             { text: '泛型与类型安全', link: '/trpc-agent-go/go-fundamentals/05-generics-types' },
-            { text: '迭代器', link: '/go-iterators/' },
+            { text: '迭代器', link: '/trpc-agent-go/go-fundamentals/06-iterators' },
             { text: 'LLM 与 Chat Completion', link: '/trpc-agent-go/go-fundamentals/07-llm-chat-completion' },
             { text: 'Tool Calling 工作机制', link: '/trpc-agent-go/go-fundamentals/08-tool-calling' },
             { text: '流式响应、SSE 与事件', link: '/trpc-agent-go/go-fundamentals/09-streaming-sse' },
