@@ -283,4 +283,4 @@ memoryService, _ := pgvector.NewService(
 
 Memory 系统的设计精髓在于**解耦**：同一套 `memory.Service` 接口，写入侧可以换成 Agent、本地 Extractor、mem0、TencentDB；存储侧可以换成 8 种后端；读取侧可以是工具调用、预加载、或 recall 插件。理解了 simple 的三段式接线，其它模式都是在这个骨架上替换组件。
 
-Memory 与 [`session/`](../07-session-management/session.md) 紧密配合：Session 负责单次会话上下文，Memory 负责跨会话长期信息。生产环境建议组合使用，并根据数据规模和合规要求选择合适的后端与模式。
+Memory 与 [`session/`](../08-session-management/session.md) 紧密配合：Session 负责单次会话上下文，Memory 负责跨会话长期信息。生产环境建议组合使用，并根据数据规模和合规要求选择合适的后端与模式。

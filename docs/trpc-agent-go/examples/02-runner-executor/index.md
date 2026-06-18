@@ -166,5 +166,5 @@ Runner 的设计精髓在于**关注分离**：
 进一步学习：
 
 - Agent 接口与执行循环：[`01-agent-basics`](../01-agent-basics/)
-- Session / Memory 深度：[`06-memory-system`](../06-memory-system/memory.md) / [`07-session-management`](../07-session-management/session.md)
+- Session / Memory 深度：[`06-memory-system`](../07-memory-system/memory.md) / [`07-session-management`](../08-session-management/session.md)
 - 宏观架构：[`18-architecture`](../../18-architecture.md) / [`19-diagrams`](../../19-diagrams.md)

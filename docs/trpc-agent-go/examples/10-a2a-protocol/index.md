@@ -334,6 +334,6 @@ A2A 分类的设计精髓在于**接口透明、协议开放、边界正交**：
 进一步学习：
 
 - Agent 基础与 Coordinator 模式：[`01-agent-basics`](../01-agent-basics/)
-- 多 Agent 编排（本地 SubAgents / AgentTool）：[`05-multi-agent`](../05-multi-agent/)
-- 工具系统（MCP 对照）：[`02-tool-system`](../02-tool-system/)
+- 多 Agent 编排（本地 SubAgents / AgentTool）：[`05-multi-agent`](../06-multi-agent/)
+- 工具系统（MCP 对照）：[`02-tool-system`](../03-tool-system/)
 - 宏观架构与组件关系：[`18-architecture`](../../18-architecture.md)

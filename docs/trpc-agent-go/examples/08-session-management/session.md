@@ -303,4 +303,4 @@ Session 系统的设计精髓在于**解耦与正交**：
 
 理解了 simple 的两行接线（`NewSessionServiceByType` + `WithSessionService`）和三元组隔离，其它子示例都是在同一骨架上替换组件、叠加配置。
 
-Session 与 [`06-memory-system`](../06-memory-system/memory.md) 紧密配合：Session 负责单次会话的短期上下文（事件历史），Memory 负责跨会话的长期信息（用户画像）。生产环境建议组合使用，并根据数据规模、合规要求、检索需求选择合适的后端与机制。
+Session 与 [`06-memory-system`](../07-memory-system/memory.md) 紧密配合：Session 负责单次会话的短期上下文（事件历史），Memory 负责跨会话的长期信息（用户画像）。生产环境建议组合使用，并根据数据规模、合规要求、检索需求选择合适的后端与机制。
