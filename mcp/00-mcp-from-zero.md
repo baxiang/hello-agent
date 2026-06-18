@@ -1,71 +1,18 @@
-# 00 - 从 0 开始学习 MCP 协议
+# 协议总览
 
-MCP 的全称是 Model Context Protocol，通常翻译为“模型上下文协议”。它的目标是让 AI 应用用统一方式连接外部数据、工具和工作流，而不是每接一个系统都重新写一套私有插件接口。
+> **协议详解篇第一节。** [入门篇](./getting-started/02-primitives-tour.md) 你已经会写最小 Server、知道三大原语。本节给你一张「**协议全景地图**」——JSON-RPC 消息、生命周期、能力协商、安全边界一次性串起来。
+>
+> **本节你将学到**：JSON-RPC 2.0 三种消息、初始化与能力协商、生命周期三阶段、三大原语快速回顾、常见协议错误、最小实现清单。
+>
+> **一句话比喻**：如果入门篇教你「**装一个 USB-C U 盘**」，本节教你「**整个 USB-C 标准的电气规范**」——从消息格式到握手协议到安全边界。
 
-可以把 MCP 理解为：AI 应用和外部能力之间的一层标准协议。
+MCP 的全称是 Model Context Protocol，通常翻译为「模型上下文协议」。它的目标是让 AI 应用用统一方式连接外部数据、工具和工作流。
 
-## 1. 先理解 MCP 解决的问题
+::: tip 本节是地图，不是手册
+本节力求让你**看清 MCP 全貌**，每个对象的细节（字段、示例、边界情况）在后续 5 篇专题里展开。看完本节你应该知道「这块东西归哪一章查」。
+:::
 
-大模型本身不知道你的本地文件、数据库、Git 仓库、Slack、工单系统或公司内部 API。传统做法是给每个 AI 应用分别写集成：
-
-- 给 A 应用写 GitHub 插件。
-- 给 B 应用再写一套 GitHub 插件。
-- 给 C 应用又写一套数据库插件。
-
-这会带来几个问题：
-
-- 接入成本高：每个应用都有自己的插件格式。
-- 权限边界不清：工具能读什么、写什么，经常和应用强绑定。
-- 可复用性差：一个工具集成很难在多个 AI 客户端之间迁移。
-
-MCP 的思路是把集成抽象成通用协议：
-
-- 工具提供方实现 MCP Server。
-- AI 应用作为 MCP Host。
-- Host 内部创建 MCP Client，与 MCP Server 建立一对一会话。
-- 双方通过 JSON-RPC 2.0 消息交换能力、上下文和调用结果。
-
-## 2. 三个核心角色
-
-### Host
-
-Host 是用户正在使用的 AI 应用，例如 IDE、桌面助手、聊天应用或自动化平台。Host 负责：
-
-- 管理用户界面和用户授权。
-- 创建和管理多个 MCP Client。
-- 决定哪些 Server 可以连接。
-- 聚合上下文，并把必要信息交给模型。
-- 执行安全策略，例如工具调用前让用户确认。
-
-Host 是安全边界的核心。Server 不应该直接看到完整对话，也不应该绕过 Host 读取用户数据。
-
-### Client
-
-Client 是 Host 内部的连接器。通常一个 Client 只连接一个 Server。Client 负责：
-
-- 建立一个有状态会话。
-- 发送初始化请求。
-- 协商协议版本和能力。
-- 路由请求、响应、通知。
-- 隔离不同 Server 之间的上下文。
-
-简单说：Host 可以有多个 Client，每个 Client 管一个 Server。
-
-### Server
-
-Server 是能力提供者。它可以连接本地文件系统、数据库、HTTP API、内部服务或业务系统。Server 负责暴露：
-
-- Resources：可读取的上下文数据。
-- Prompts：可复用的提示词模板或工作流入口。
-- Tools：可执行的函数或动作。
-
-Server 应该聚焦于清晰的小能力。例如：
-
-- filesystem server：读写指定目录。
-- postgres server：查询数据库 schema 和执行受控 SQL。
-- github server：读取 issue、创建 PR、查看 diff。
-
-## 3. MCP 的通信基础：JSON-RPC 2.0
+## 1. MCP 的通信基础：JSON-RPC 2.0
 
 MCP 的基础消息格式来自 JSON-RPC 2.0。常见消息有三类。
 
@@ -127,7 +74,7 @@ MCP 的基础消息格式来自 JSON-RPC 2.0。常见消息有三类。
 }
 ```
 
-## 4. 一次连接的生命周期
+## 2. 一次连接的生命周期
 
 MCP 会话通常分三段：
 
@@ -209,7 +156,7 @@ Server 返回自己支持的协议版本、能力和服务信息。
 
 stdio 传输下，Host 通常会关闭 stdin 或终止子进程。HTTP 传输下，连接和会话的关闭取决于实现和传输细节。
 
-## 5. Server 提供的三类核心能力
+## 3. Server 提供的三类核心能力
 
 ### 5.1 Resources：上下文数据
 
@@ -324,7 +271,7 @@ Tool 风险最高，因为它可能读写外部系统。Host 应该让用户理�
 }
 ```
 
-## 6. Client 可以提供的能力
+## 4. Client 可以提供的能力
 
 MCP 不是单向协议。Server 不只被调用，也可以在允许范围内向 Client 请求能力。
 
@@ -345,7 +292,7 @@ Elicitation 允许 Server 通过 Client 向用户请求额外信息。它有两�
 
 安全原则：不要通过普通表单收集密码、API key、访问令牌或支付凭证。敏感信息应使用更受控的 URL 流程，并由 Host 明确展示目标域名和用户确认。
 
-## 7. 传输方式
+## 5. 传输方式
 
 MCP 当前标准传输主要包括 stdio 和 Streamable HTTP。
 
@@ -392,26 +339,7 @@ Streamable HTTP 适合远程或服务化 Server。它使用 HTTP POST 和 GET，
 - 本地服务优先绑定 `127.0.0.1`，不要随意监听 `0.0.0.0`。
 - 远程服务应该实现认证和授权。
 
-## 8. MCP 和普通 Function Calling 的区别
-
-Function Calling 通常是模型供应商 API 内的一种工具调用格式。它回答的是：
-
-> 模型如何表达“我要调用这个函数”？
-
-MCP 回答的是：
-
-> AI 应用如何发现、连接、协商、读取、调用和管理外部能力？
-
-两者可以配合使用：
-
-- MCP Server 暴露 tools。
-- Host 把可用工具转换成模型可理解的工具定义。
-- 模型选择工具。
-- Host 通过 MCP Client 调用 Server。
-- Server 返回结果。
-- Host 再把结果交给模型继续推理。
-
-## 9. 最小 MCP Server 的设计清单
+## 6. 最小 MCP Server 的设计清单
 
 从 0 写一个 MCP Server，不要先追求大而全。先明确以下问题：
 
@@ -432,7 +360,7 @@ MCP 回答的是：
 
 等基本链路跑通后，再加入 Resources、Prompts、分页、日志、认证和订阅。
 
-## 10. 常见误区
+## 7. 常见误区
 
 ### 误区一：Server 什么都能访问
 
@@ -450,34 +378,37 @@ MCP 回答的是：
 
 不是。MCP 可以通过 stdio 跑本地 Server，也可以通过 Streamable HTTP 连接远程 Server。
 
-## 11. 从这里继续学
-
-建议按下面顺序实践：
-
-1. 只读 Tool：写一个 `get_time` 或 `list_files`。
-2. 带参数 Tool：写一个 `search_docs(query)`。
-3. Resource：暴露一个 `file://` 或 `docs://` 资源。
-4. Prompt：暴露一个 `summarize_doc` 模板。
-5. 权限：限制 Server 只能读取指定目录。
-6. 错误处理：让错误信息能帮助模型修正参数。
-7. 传输升级：从 stdio 迁移到 Streamable HTTP。
-
-## 12. 核心术语速查
+## 8. 核心术语速查
 
 | 术语 | 含义 |
 | --- | --- |
 | Host | 用户使用的 AI 应用，负责 UI、权限、模型集成和 Client 管理 |
 | Client | Host 内部的 MCP 连接器，一个 Client 通常连接一个 Server |
 | Server | 外部能力提供者，暴露资源、提示词和工具 |
-| Resource | 可读上下文数据，例如文件、schema、文档 |
-| Prompt | 用户可选择的提示词模板或工作流入口 |
-| Tool | 模型可请求调用的函数或动作 |
+| Resource | 可读上下文数据（application-driven），例如文件、schema、文档 |
+| Prompt | 用户可选择的提示词模板或工作流入口（user-controlled） |
+| Tool | 模型可请求调用的函数或动作（model-controlled） |
 | Sampling | Server 请求 Client 调用模型生成内容 |
 | Roots | Client 告诉 Server 的可操作边界 |
 | Elicitation | Server 通过 Client 向用户请求额外信息 |
 | Transport | 传输层，例如 stdio 或 Streamable HTTP |
 
-## 13. 官方参考
+## 动手实验
+
+1. **抓 JSON-RPC 消息**：用 [入门篇 01](./getting-started/01-first-server.md) 的 Server + Inspector，打开浏览器开发者工具或看 Inspector 的日志，找出一条 `tools/list` 请求和响应，对照本节 §1 的格式逐字段解读。
+2. **生命周期观察**：用 Inspector 连接 Server 时，看左侧日志里的 `initialize` → 能力协商 → 正常调用 → 关闭四步，对照本节 §2 的生命周期阶段。
+3. **传输方式对比**：把同一个 Server 分别用 stdio 和 Streamable HTTP 启动（Streamable HTTP 需要改 `mcp.run(transport="http")`），用 Inspector 连接两种，观察启动方式、可远程性、配置差异。
+4. **能力清单核对**：找一个开源 MCP Server（如 filesystem），用 Inspector 读它的 `initialize` 响应里的 `capabilities` 字段，看它声明了哪些原语（resources/tools/prompts 哪些勾选了）。
+
+## 接下来
+
+- [协议架构](./01-protocol-architecture.md) —— JSON-RPC 消息、初始化握手、能力协商的完整细节
+- [Server 能力](./02-server-capabilities.md) —— Resources / Prompts / Tools 三原语深入
+- [Client 能力](./03-client-capabilities.md) —— Roots / Sampling / Elicitation 等反向能力
+- [传输与安全](./04-transports-security.md) —— stdio 与 Streamable HTTP 的对比与安全
+- [实现指南](./05-implementation-guide.md) —— 按工程清单落地一个 Server
+
+## 官方参考
 
 - MCP 规范：https://modelcontextprotocol.io/specification/2025-11-25
 - MCP 架构：https://modelcontextprotocol.io/specification/2025-11-25/architecture
@@ -486,21 +417,3 @@ MCP 回答的是：
 - MCP 传输：https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
 - MCP Server 能力：https://modelcontextprotocol.io/specification/2025-11-25/server
 - MCP 官方仓库：https://github.com/modelcontextprotocol/modelcontextprotocol
-
-## 14. 本目录接下来怎么学
-
-这篇只建立第一层地图。继续阅读时建议按下面顺序推进：
-
-1. 先读 `01-protocol-architecture.md`，弄清楚协议分层、生命周期和 JSON-RPC 消息。
-2. 再读 `02-server-capabilities.md`，重点掌握 Server 到底能暴露什么。
-3. 再读 `03-client-capabilities.md`，理解 Host/Client 为什么也能向 Server 提供能力。
-4. 然后读 `04-transports-security.md`，把本地进程、远程 HTTP、权限、安全确认联系起来。
-5. 最后读 `05-implementation-guide.md`，按清单设计一个最小可用 MCP Server。
-
-学习 MCP 的关键不是背方法名，而是建立判断：
-
-- 数据给模型看，优先考虑 Resource。
-- 用户主动触发工作流，优先考虑 Prompt。
-- 模型需要执行动作，优先考虑 Tool。
-- Server 需要模型能力，考虑 Sampling，但必须由 Host 控制。
-- Server 需要用户输入，考虑 Elicitation，但敏感信息不能用普通表单收集。
