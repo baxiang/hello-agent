@@ -562,7 +562,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '00 - Runner 执行器',
+              text: '02 - Runner 执行器',
               collapsed: true,
               items: [
                 { text: 'Runner 执行器（原理索引）', link: '/trpc-agent-go/examples/00-runner-executor/' },
@@ -574,7 +574,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '02 - 工具系统',
+              text: '03 - 工具系统',
               collapsed: true,
               items: [
                 { text: '工具索引', link: '/trpc-agent-go/examples/02-tool-system/tool' },
@@ -595,7 +595,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '03 - MCP 工具',
+              text: '04 - MCP 工具',
               collapsed: true,
               items: [
                 { text: 'MCP 索引', link: '/trpc-agent-go/examples/03-mcp-tools/mcptool' },
@@ -608,7 +608,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '04 - Graph 工作流',
+              text: '05 - Graph 工作流',
               collapsed: true,
               items: [
                 { text: 'Graph 索引', link: '/trpc-agent-go/examples/04-graph-workflow/graph' },
@@ -621,7 +621,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '05 - 多 Agent 协作',
+              text: '06 - 多 Agent 协作',
               collapsed: true,
               items: [
                 { text: '多 Agent 编排', link: '/trpc-agent-go/examples/05-multi-agent/multiagent' },
@@ -630,7 +630,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '06 - Memory 系统',
+              text: '07 - Memory 系统',
               collapsed: true,
               items: [
                 { text: 'Memory 索引', link: '/trpc-agent-go/examples/06-memory-system/memory' },
@@ -642,7 +642,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '07 - Session 管理',
+              text: '08 - Session 管理',
               collapsed: true,
               items: [
                 { text: 'Session 索引', link: '/trpc-agent-go/examples/07-session-management/session' },
@@ -656,7 +656,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '08 - Agent Skills',
+              text: '09 - Agent Skills',
               collapsed: true,
               items: [
                 { text: 'Skill 基础', link: '/trpc-agent-go/examples/08-agent-skills/skill' },
@@ -671,7 +671,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '09 - A2A 协议',
+              text: '10 - A2A 协议',
               collapsed: true,
               items: [
                 { text: 'A2A 协议（原理索引）', link: '/trpc-agent-go/examples/09-a2a-protocol/' },
@@ -683,7 +683,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '10 - AG-UI 协议',
+              text: '11 - AG-UI 协议',
               collapsed: true,
               items: [
                 { text: 'AG-UI 协议（原理索引）', link: '/trpc-agent-go/examples/10-agui-protocol/' },
@@ -692,7 +692,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '11 - 代码执行',
+              text: '12 - 代码执行',
               collapsed: true,
               items: [
                 { text: '代码执行', link: '/trpc-agent-go/examples/11-code-execution/codeexecution' },
@@ -700,7 +700,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '12 - 知识检索 RAG',
+              text: '13 - 知识检索 RAG',
               collapsed: true,
               items: [
                 { text: 'Knowledge 索引', link: '/trpc-agent-go/examples/12-knowledge-rag/knowledge' },
@@ -758,7 +758,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '13 - 模型与提供商',
+              text: '14 - 模型与提供商',
               collapsed: true,
               items: [
                 { text: 'Model 索引', link: '/trpc-agent-go/examples/13-model-provider/model' },
@@ -773,7 +773,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '14 - Prompt 与输出',
+              text: '15 - Prompt 与输出',
               collapsed: true,
               items: [
                 { text: 'Prompt 管理', link: '/trpc-agent-go/examples/14-prompt-output/prompt' },
@@ -786,7 +786,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '15 - 评测与进化',
+              text: '16 - 评测与进化',
               collapsed: true,
               items: [
                 { text: 'Evaluation 索引', link: '/trpc-agent-go/examples/15-evaluation/evaluation' },
@@ -831,7 +831,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '16 - 可观测性',
+              text: '17 - 可观测性',
               collapsed: true,
               items: [
                 { text: 'Callbacks 索引', link: '/trpc-agent-go/examples/16-observability/callbacks' },
@@ -844,7 +844,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '17 - 安全防护',
+              text: '18 - 安全防护',
               collapsed: true,
               items: [
                 { text: 'Guardrail 防护', link: '/trpc-agent-go/examples/17-safety-guardrails/guardrail' },
@@ -853,7 +853,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '18 - 搜索与外部集成',
+              text: '19 - 搜索与外部集成',
               collapsed: true,
               items: [
                 { text: 'DuckDuckGo 搜索', link: '/trpc-agent-go/examples/18-search-integration/duckduckgo' },
@@ -867,7 +867,7 @@ export default withMermaid({
               ]
             },
             {
-              text: '19 - 高级特性',
+              text: '20 - 高级特性',
               collapsed: true,
               items: [
                 { text: '上下文压缩', link: '/trpc-agent-go/examples/19-advanced-features/context_compaction' },
