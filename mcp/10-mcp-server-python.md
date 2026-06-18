@@ -1,6 +1,10 @@
 # Python MCP Server 实战 — 从零构建工具服务
 
-> 本文基于官方 `mcp` Python SDK，从零构建一个完整的 MCP Server，包含文件操作、数据库查询、外部 API 调用三种典型工具。
+> **实践模块第一节。** [协议详解篇](./00-mcp-from-zero.md) 把 MCP 的消息格式、生命周期、三大原语讲透后，本节开始动手——基于官方 `mcp` Python SDK 从零搭一个能跑的 Server，覆盖文件操作、数据库查询、外部 API 调用三种典型工具。
+>
+> **本节你将学到**：环境搭建、最简 Server 模板、`list_tools` / `call_tool` 注册机制、Resource 与 Prompt 的暴露方式、路径遍历与 SQL 注入防护、速率限制。
+>
+> **一句话比喻**：如果协议篇是「**学交通规则**」，本节是「**第一次实际上路开车**」——从最简模型起步，逐步加上文件、数据库、API 三大常用工具，最后做生产级安全加固。
 
 ## 1. 环境搭建
 
@@ -298,3 +302,16 @@ class RateLimiter:
         self.calls[tool_name] = [t for t in self.calls[tool_name] if now - t < self.window]
         return len(self.calls[tool_name]) < self.max_calls
 ```
+
+## 动手实验
+
+1. **跑通最简 Server**：把 §2 的 `server.py` 存盘，用 `npx @anthropic-ai/mcp-inspector python server.py` 连上，在 Inspector 的 Tools 标签页调用 `hello`，看到 `Hello, ...!` 返回。
+2. **接进 Claude Desktop**：按 §2 的 `claude_desktop_config.json` 把这个 Server 加进去，重启后在对话里让 Claude 调用 `hello`，观察它如何自动从自然语言里提取 `name` 参数。
+3. **改造综合 Server**：把 §3 的 `advanced_server.py` 跑起来，给它新增一个工具（如 `get_current_time` 返回当前时间），分别在 `list_tools` 注册声明、在 `call_tool` 加分支处理。
+4. **对比两种语言**：做完本节后翻到下一篇 [Go 实现](./11-mcp-server-go.md)，看同一个「文件 + 数据库 + HTTP」工具集在静态语言里写法有何不同，重点看 `safePath` 和错误处理风格。
+
+## 接下来
+
+- [Go MCP Server 实战](./11-mcp-server-go.md) —— 同样的工具集用 Go + tRPC-MCP-Go 重写，对比两种语言的工程差异与 Agent 集成
+- [MCP Client 多平台接入](./12-mcp-client-integration.md) —— 把本节写好的 Server 接进 Claude Desktop / Cursor / 各 Agent 框架
+- [实现指南](./05-implementation-guide.md) —— 回到协议详解篇的工程清单，对照本节代码核对设计要点

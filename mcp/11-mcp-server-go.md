@@ -1,6 +1,10 @@
 # Go MCP Server 实战 — 基于 tRPC-MCP-Go
 
-> 利用 tRPC-MCP-Go 构建生产级 MCP Server，与 tRPC-Agent-Go 无缝集成。
+> **实践模块第二节。** [上一节](./10-mcp-server-python.md) 用 Python 写完了同一个工具集，本节换一种姿势——用 Go + tRPC-MCP-Go 构建生产级 MCP Server，并演示它与 tRPC-Agent-Go 的无缝集成。
+>
+> **本节你将学到**：Go 环境搭建、`RegisterTool` 注册机制、文件 / 数据库 / HTTP 三类工具的 Go 实现、`safePath` 路径遍历防护、用 `NewMCPToolSet` 把 Server 接进 Agent。
+>
+> **一句话比喻**：如果 Python 篇是「**快速搭原型**」，本节是「**换上重卡跑生产**」——同一套工具用静态语言重写，强调类型安全、并发模型和工程化集成。
 
 ## 1. 环境搭建
 
@@ -325,6 +329,19 @@ defer toolSet.Close()
 
 agent := llmagent.New("go-assistant",
     llmagent.WithModel(openai.New("deepseek-chat")),
-    llmagent.WithToolSets([]tool.ToolSet{toolSet}),
+    llmagent.WithToolsets([]tool.ToolSet{toolSet}),
 )
 ```
+
+## 动手实验
+
+1. **跑通最简 Server**：把 §2 的 `main.go` 存盘，`go run .` 启动后用 `npx @anthropic-ai/mcp-inspector` 连上 stdio，调用 `hello` 工具看到 `Hello, ...!`。
+2. **跑生产级 Server**：把 §3 的代码落到项目里，设置 `WORK_DIR` 和 `DB_PATH` 环境变量，用 Inspector 依次调用 `read_file` / `write_file` / `query_database` / `http_request`，验证 `safePath` 是否拦住了 `../` 越界访问。
+3. **加一个新工具**：仿照 `handleHTTPRequest` 的写法，注册一个 `get_env` 工具读取指定环境变量，注意在 `registerTools` 里声明 `InputSchema`。
+4. **对比 Python vs Go**：对照 [Python 篇](./10-mcp-server-python.md) 的同名工具，比较两种语言在错误返回（`TextContent` 文本 vs `NewErrorResult`）、路径防护、SQL 黑名单上的写法差异。
+
+## 接下来
+
+- [MCP Client 多平台接入](./12-mcp-client-integration.md) —— 把本节的 Go Server 接进 Claude Desktop / Cursor / tRPC-Agent-Go / 各语言 Agent 框架
+- [MCP 进阶架构](./13-mcp-advanced.md) —— Session 生命周期、Docker/K8s 生产部署、四层安全架构
+- [Python MCP Server 实战](./10-mcp-server-python.md) —— 回看同一套工具的 Python 实现，横向对比两种语言范式

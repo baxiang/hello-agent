@@ -1,4 +1,10 @@
-# 01 - MCP 协议架构与消息模型
+# 协议架构
+
+> **协议详解篇第二节。** [上一节](./00-mcp-from-zero.md) 你拿到了协议全景地图，本节把镜头拉近，拆开 MCP 的**协议骨架**——谁和谁通信、消息怎么编码、会话怎么建立、能力怎么协商。
+>
+> **本节你将学到**：Host/Client/Server 三角架构、协议五层划分、JSON-RPC 2.0 三种消息、初始化握手与能力协商、分页与进度通知、方法命名规律。
+>
+> **一句话比喻**：如果上一节是「**地图**」，本节是「**底盘拆解**」——把 MCP 这辆车架起来，看清每颗螺丝怎么受力。
 
 这一章关注 MCP 的协议骨架：谁和谁通信、会话如何建立、消息如何编码、能力如何协商。理解这些之后，再看 Resources、Prompts、Tools 才不会停留在“几个 API 名字”的层面。
 
@@ -396,4 +402,17 @@ notifications/<event>
 - JSON-RPC Request、Response、Notification 的区别。
 - 能力协商如何避免调用不存在的方法。
 - cursor、progress token、notification 分别解决什么问题。
+
+## 动手实验
+
+1. **抓一次完整握手**：用 Inspector 连任意 Server，从日志里找出 `initialize` 请求、`initialize` 响应、`notifications/initialized` 三条消息，对照 §4 逐字段标注「这一步在协商什么」。
+2. **构造能力缺失场景**：写一个只声明 `tools` 能力的 Server，故意调用 `resources/list`，观察 Server 返回什么错误，验证能力协商的作用。
+3. **对比三种消息**：在抓到的报文里各挑一条 Request、Response、Notification，标出哪条有 `id`、哪条没有，验证 §3 的规则。
+4. **触发一次进度通知**：写一个会 sleep 的长任务 Tool，调用时带上 `_meta.progressToken`，观察 `notifications/progress` 是否按预期到达。
+
+## 接下来
+
+- [Server 能力](./02-server-capabilities.md) —— Resources / Prompts / Tools 三原语的字段、方法与设计取舍
+- [Client 能力](./03-client-capabilities.md) —— Roots / Sampling / Elicitation 等反向能力
+- [传输与安全](./04-transports-security.md) —— stdio 与 Streamable HTTP 的部署与安全
 

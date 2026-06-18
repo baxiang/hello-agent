@@ -1,6 +1,10 @@
 # MCP 进阶架构 — Session·生产部署·安全
 
-> Session 生命周期、三种传输对比、生产部署（Docker/K8s）、安全架构、与 A2A 协同。
+> **实践模块第四节（本系列最后一篇）。** 前三节搞定了 Server 编写和 Client 接入，本节收尾——把视角拉到生产级：Session 生命周期、三种传输对比、Docker/K8s 部署、四层安全架构，以及 MCP 与 A2A 的协同定位。
+>
+> **本节你将学到**：Session 建立与断线恢复、STDIO / SSE / Streamable HTTP 的选型决策、Docker 与 Kubernetes 部署清单、传输→认证→授权→审计的四层安全模型、Streamable HTTP 迁移建议。
+>
+> **一句话比喻**：如果前三节是「**把车造好开上街**」，本节是「**上高速前的年检和保养手册**」——Session 管理、部署编排、安全防线，决定你的 Server 能不能扛住生产流量。
 
 ## 1. Session 生命周期
 
@@ -135,3 +139,18 @@ Streamable HTTP 已替代 SSE 成为推荐传输：
 - 双向流式（Server 推送 + Client 流式上传）
 - 标准 HTTP（兼容所有代理/LB/CDN）
 - 新项目优先使用 Streamable HTTP
+
+## 动手实验
+
+1. **观察 Session 全流程**：用 [Inspector](https://github.com/modelcontextprotocol/inspector) 连一个 Server，对照 §1 的时序图，在日志里依次找出 `initialize` → 能力协商 → `Initialized` → `tools/list` → `tools/call` → `Disconnect` 六个阶段。
+2. **容器化你的 Server**：按 §3 的 Dockerfile，把 [Python 篇](./10-mcp-server-python.md) 的 `advanced_server.py` 打成镜像，用 Streamable HTTP 跑起来，再从另一台机器（或另一个容器）用 Inspector 远程连上验证。
+3. **K8s 部署演练**：把 §3 的 Deployment + Service apply 到本地集群（minikube 或 k8s），`kubectl port-forward` 把 Service 暴露出来，验证 `livenessProbe` 是否生效（故意把 `/health` 改挂，看 Pod 是否被重启）。
+4. **对比三种传输**：把同一个 Server 分别用 STDIO / SSE / Streamable HTTP 启动，对照 §2 的表格，从「通信方向、并发能力、认证方式、是否需要网络」四个维度实测一遍，得出你自己的选型结论。
+
+## 接下来
+
+本篇是 MCP 系列的最后一篇。接下来推荐三个方向：
+
+- [实现指南](./05-implementation-guide.md) —— 回到协议详解篇，按工程清单逐项核对你的生产 Server 是否还有遗漏
+- [传输与安全](./04-transports-security.md) —— 深入 stdio / Streamable HTTP 的安全边界、DNS rebinding、本地绑定等细节
+- [A2A 协议总览](../a2a/00-a2a-from-zero.md) —— 读完 MCP（Agent ↔ 工具）后，去看「Agent ↔ Agent」如何用 A2A 协议跨框架委托任务

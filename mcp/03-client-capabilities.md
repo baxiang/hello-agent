@@ -1,6 +1,12 @@
-# 03 - MCP Client 能力：Roots、Sampling、Elicitation 与辅助能力
+# Client 能力
 
-MCP 不是“Server 暴露工具，Client 调用工具”这么简单。Client 也可以向 Server 暴露受控能力。理解 Client 能力，才能正确设计权限边界和高级工作流。
+> **协议详解篇第四节。** [上一节](./02-server-capabilities.md) 你掌握了 Server 暴露的三类能力，本节调转方向——**Client 也能向 Server 暴露受控能力**。理解这一层，才能设计对权限边界和高级工作流。
+>
+> **本节你将学到**：Roots（边界）、Sampling（反向调用模型）、Elicitation（向用户要信息），以及 Logging、Completion、Ping 等辅助能力，还有 Host 为什么必须掌控它们。
+>
+> **一句话比喻**：如果 Server 是「**餐厅后厨**」，Client 能力就是「**前厅经理**」——告诉后厨能用哪些食材（Roots）、能不能借用前台算力（Sampling）、什么时候要找客人确认（Elicitation）。
+
+MCP 不是"Server 暴露工具，Client 调用工具"这么简单。Client 也可以向 Server 暴露受控能力。理解 Client 能力，才能正确设计权限边界和高级工作流。
 
 ## 1. 为什么需要 Client 能力
 
@@ -285,4 +291,17 @@ Ping 用于健康检查。
 - Elicitation 为什么不能直接收集敏感凭证。
 - Completion 的体验价值和安全限制。
 - MCP 为什么是双向能力协议。
+
+## 动手实验
+
+1. **观察 roots 协商**：用一个支持 roots 的 Host（如 Claude Desktop 或 Inspector），在 `initialize` 响应里确认 `capabilities.roots` 存在，再发起 `roots/list` 看返回的工作区。
+2. **走通一次 Sampling**：写一个会调用 `sampling/createMessage` 的 Server（例如让它给自己的 Resource 生成摘要），在 Host 里观察确认弹窗、上下文裁剪、模型选择。
+3. **触发 Elicitation**：写一个缺参时调用 `elicitation/create` 的 Tool，让它通过表单问用户「选哪个环境」，验证 form 模式的交互闭环。
+4. **对比 form 与 url**：思考「让用户填邮箱」和「让用户完成 OAuth 登录」分别该用哪种 Elicitation 模式，写下你的判断依据（参考 §4.2 的安全原则）。
+
+## 接下来
+
+- [传输与安全](./04-transports-security.md) —— 这些 Client 能力的传输载体与安全边界
+- [实现指南](./05-implementation-guide.md) —— 实现 Host 时如何统一管控 roots / sampling / elicitation
+- [Server 能力](./02-server-capabilities.md) —— 回看 Server 侧，理解「双向协议」的另一端
 

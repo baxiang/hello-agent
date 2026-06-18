@@ -1,4 +1,10 @@
-# 04 - MCP 传输、安全与权限边界
+# 传输与安全
+
+> **协议详解篇第五节。** [前几节](./01-protocol-architecture.md) 谈的都是「**消息长什么样**」，本节回到地面——**消息怎么传、谁能看、谁要批准**。传输方式直接决定部署形态和安全风险。
+>
+> **本节你将学到**：stdio 与 Streamable HTTP 的差异与选型、四类安全边界（用户/数据/动作/网络）、最小权限设计、Prompt Injection 防护、认证授权与可观测性。
+>
+> **一句话比喻**：消息是「**信**」，传输是「**送信方式**」——stdio 像内部公文流转（快、但只在本机），HTTP 像邮政系统（能跨地、但要贴邮票、查身份）。
 
 MCP 的协议消息是一层，消息如何传输是另一层。传输方式会直接影响部署形态、认证方式、进程生命周期和安全风险。
 
@@ -229,4 +235,17 @@ HTTP 场景需要明确认证：
 - 为文件、数据库、HTTP API 设计最小权限。
 - 判断哪些 Tool 必须用户确认。
 - 识别 Resource/Tool 结果中的 prompt injection 风险。
+
+## 动手实验
+
+1. **双传输对比**：把同一个 Server 分别用 stdio 和 Streamable HTTP 启动，用 Inspector 连两种，记录启动命令、是否监听端口、能否远程访问的差异。
+2. **验证 stdout 污染**：故意在一个 stdio Server 里往 stdout 打一条 `print("hello")`，观察 Client 是否还能正常解析消息，体会 §2.1 的规则。
+3. **构造路径穿越**：给一个文件 Resource Server 发 `resources/read` 带 `../../etc/passwd` 风格的 URI，确认你的 Server 拒绝它（如果没拒绝，现在补上校验）。
+4. **识别 Prompt Injection**：让一个 Tool 返回包含「Ignore previous instructions...」的文本，观察你的 Host 是否对结果做了来源标记、是否仍然要求高风险动作确认。
+
+## 接下来
+
+- [实现指南](./05-implementation-guide.md) —— 把传输与安全要求落进发布清单和测试矩阵
+- [协议架构](./01-protocol-architecture.md) —— 传输层之上的消息格式与会话生命周期
+- [Server 能力](./02-server-capabilities.md) —— 哪些 Tool 最需要用户确认和最小权限
 

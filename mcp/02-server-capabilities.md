@@ -1,4 +1,10 @@
-# 02 - MCP Server 能力：Resources、Prompts、Tools
+# Server 能力
+
+> **协议详解篇第三节。** [上一节](./01-protocol-architecture.md) 你看清了协议骨架与消息格式，本节聚焦 Server 侧——Server 到底能暴露哪几类能力，以及为什么**不是所有东西都该做成 Tool**。
+>
+> **本节你将学到**：Resources / Prompts / Tools 的选择原则、三类能力的对象结构与调用方法、Resource Template、订阅与变更通知、Tool 输入 schema 设计、协议错误 vs 业务错误。
+>
+> **一句话比喻**：Server 三件套像「**资料柜 / 命令手册 / 工具箱**」——Resource 给模型读、Prompt 给用户选、Tool 给模型动手，三者各司其职。
 
 MCP Server 的价值在于把外部系统能力暴露给 AI 应用。但不是所有能力都应该做成 Tool。MCP 把 Server 能力拆成 Resources、Prompts、Tools，分别对应“给上下文的数据”“给用户触发的模板”“给模型执行的动作”。
 
@@ -462,4 +468,17 @@ Tool 的输入 schema 是模型能否正确调用的关键。
 - 区分协议错误和工具业务错误。
 - 解释 Resource Template 适合什么场景。
 - 列出 Server 能力相关的主要方法。
+
+## 动手实验
+
+1. **三类原语都跑通**：用 [入门篇 02](./getting-started/02-primitives-tour.md) 的 demo Server，在 Inspector 里分别调 `resources/list`、`prompts/get`、`tools/call`，对照本章字段表看清每个响应的结构。
+2. **Resource Template 实战**：给你的 Server 加一个 `file:///{path}` 风格的 Resource Template，调用 `resources/templates/list`，再用模板拼一个真实 URI 去 `resources/read`。
+3. **构造两类错误**：分别触发一次「缺必填参数」（应得 JSON-RPC error）和「Tool 业务失败」（应得 `isError: true`），对比 §4.4 的两种错误形态。
+4. **订阅一次资源变化**：写一个会定期更新内容的 Resource，用 `resources/subscribe` 订阅它，修改内容后观察 `notifications/resources/updated` 是否到达。
+
+## 接下来
+
+- [Client 能力](./03-client-capabilities.md) —— Server 反过来向 Client 请求的 Roots / Sampling / Elicitation
+- [传输与安全](./04-transports-security.md) —— 这些能力在 stdio 和 HTTP 下分别怎么传
+- [实现指南](./05-implementation-guide.md) —— 把本章的三类能力落成一个完整 Server
 
