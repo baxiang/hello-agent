@@ -1,126 +1,330 @@
 # 迭代器（range-over-func） — trpc-agent-go 的零成本流式抽象
 
-> trpc-agent-go 在最底层的模型调用里用 `iter.Seq` 取代了部分 channel：`IterModel.GenerateContentIter` 返回一个 `Seq[*Response]`，调用方在**自己的 goroutine** 里 `for resp := range iter`，省掉了生产者 goroutine 和 channel 调度开销。不懂 Go 1.23+ 的 range-over-func，就读不懂框架为什么在流式场景下比「每个 Agent 一个 goroutine」更轻，也写不出 hedge/failover 这类组合模型。
+> 如果你写过 `for v := range []int{1,2,3}`，就能学会迭代器。本文从最熟悉的 for 循环出发，用 8 个可运行代码示例，一步步带你演化到 trpc-agent-go 在底层用 `iter.Seq` 流式产出 LLM 响应的原理。看懂这篇，你就明白框架为什么能用更少的 goroutine 处理流式输出。
 
 ## 核心概念
 
-### 1. 前置：为什么迭代器离不开闭包
+### 起点：你已经会「迭代」了
 
-Go 的迭代器本质上是一个**接收 `yield` 回调的函数**，而它产出的迭代器函数往往是个**闭包**——捕获了外部变量。如果你对闭包不熟，先看这个最小例子：
+如果你写过这两种遍历，你已经在用「迭代」：
 
 ```go
-func makeAdder(base int) func(int) int {
-    return func(x int) int {
-        // 这个匿名函数「捕获」了外层的 base 变量
-        return x + base
+package main
+
+import "fmt"
+
+func main() {
+    // 写法 A：经典三段式 for
+    nums := []int{10, 20, 30}
+    for i := 0; i < len(nums); i++ {
+        fmt.Println(nums[i])
+    }
+
+    // 写法 B：range 一个 slice
+    for _, v := range nums {
+        fmt.Println(v)
+    }
+}
+```
+
+输出：
+```
+10
+20
+30
+10
+20
+30
+```
+
+这两种写法都在「迭代」——一个一个地取出元素。**迭代器就是把这种「一个一个取」的能力，封装成一个可以传来传去的函数**。
+
+### 痛点 1：想把遍历装进函数，怎么办？
+
+假设你要写一个「生成 N 个平方数」的功能。最直觉的写法是返回一个 slice：
+
+```go
+package main
+
+import "fmt"
+
+// 生成 1 到 n 的平方数，装进 slice 返回
+func squaresSlice(n int) []int {
+    result := make([]int, 0, n)
+    for i := 1; i <= n; i++ {
+        result = append(result, i*i)
+    }
+    return result
+}
+
+func main() {
+    for _, v := range squaresSlice(5) {
+        fmt.Println(v)
+    }
+}
+```
+
+输出：
+```
+1
+4
+9
+16
+25
+```
+
+**问题来了**：如果 `n` 是 100 万呢？你得先把 100 万个数全算出来、装进 slice、占满内存，然后才开始打印第一个。
+
+**想要的能力**：能不能「算一个、打印一个」，不要一次性全算出来？这就是迭代器要解决的——**惰性求值**（lazy evaluation）。
+
+### 演化 1：用回调函数「交出」每个值
+
+在没有迭代器语法之前，Go 程序员用「回调函数」模拟惰性：
+
+```go
+package main
+
+import "fmt"
+
+// squaresCallback 不返回 slice，而是「每算出一个就调用一次 yield」
+// yield 参数传回调函数，由调用方决定怎么处理
+func squaresCallback(n int, yield func(int) bool) {
+    for i := 1; i <= n; i++ {
+        if !yield(i * i) { // 把平方数「交出」给调用方
+            return // yield 返回 false → 调用方说「不要了」，立即停止
+        }
     }
 }
 
-add10 := makeAdder(10)
-fmt.Println(add10(5))  // 15 —— base=10 被闭包记住
+func main() {
+    // 调用方传入一个回调函数，定义「拿到值后干什么」
+    squaresCallback(5, func(v int) bool {
+        fmt.Println(v)
+        return true // true = 继续给我下一个
+    })
+
+    fmt.Println("---")
+
+    // 也可以提前停止：只要回调返回 false
+    squaresCallback(100, func(v int) bool {
+        if v > 30 {
+            return false // 不要了！
+        }
+        fmt.Println(v)
+        return true
+    })
+}
 ```
 
-迭代器函数同理：它「捕获」了要遍历的数据（slice、channel、计算逻辑），然后通过 `yield` 一个一个吐出来。**闭包是迭代器的载体**。
+输出：
+```
+1
+4
+9
+16
+25
+---
+1
+4
+9
+16
+25
+```
 
-### 2. 两种迭代器签名
+**这就是迭代器的核心思想**！`yield(v)` 把值交给调用方，`yield` 返回 `false` 表示「我不要了，停止」。
 
-Go 1.23 的 `iter` 包定义了两种迭代器类型：
+但写起来有点啰嗦：每次都要传一个 `func(v int) bool { ... }`。而且没法用 `for v := range ...` 这种优雅语法。
+
+### 演化 2：Go 1.23 的 iter.Seq 类型
+
+Go 1.23 把上面的模式标准化了。标准库 `iter` 包定义了两个类型：
 
 ```go
-import "iter"
+package iter
 
-// 单值迭代器：每次 yield 一个 T（类似 for v := range slice）
+// Seq：单值迭代器（像 range slice）
 type Seq[T any] func(yield func(T) bool)
 
-// 双值迭代器：每次 yield 一个 (K, V)（类似 for k, v := range map）
+// Seq2：双值迭代器（像 range map，有 key 和 value）
 type Seq2[K, V any] func(yield func(K, V) bool)
 ```
 
-三个关键点：
+**关键理解**：`Seq[T]` 不是一个普通函数，它是一个**函数类型**。任何「接收 `yield func(T) bool` 参数」的函数，都自动是 `Seq[T]`。
 
-- **`yield` 是回调**：调用 `yield(v)` 把一个元素交给 `for` 循环。`for` 循环体本质上就是被编译器包装后传给 `yield` 的函数。
-- **`yield` 返回 `bool`**：返回 `false` 表示「消费者不想再要了」（比如 `break` 了），迭代器函数应当立即停止 yield。
-- **迭代器函数控制「何时生产」**：它按需一个一个 yield，天然惰性——消费者不取，就不生产下一个。
-
-### 3. 从零构建第一个迭代器
-
-不要一上来就背签名，先理解「迭代器函数就是一个普通的闭包」。我们从最熟悉的 slice 遍历一步步演化：
+把上面的 `squaresCallback` 改造成 `iter.Seq` 风格：
 
 ```go
-// 第一步：普通 for 遍历
-for i := 1; i <= 5; i++ {
-    fmt.Println(i * i) // 1 4 9 16 25
-}
+package main
 
-// 第二步：把遍历逻辑装进函数，但不知道怎么「把值交出去」
-// —— 这就是迭代器要解决的问题
+import "fmt"
 
-// 第三步：用 yield 回调「交出值」
+// squares 返回一个「迭代器函数」
+// 注意：返回值是一个函数，不是 slice
 func squares(n int) func(yield func(int) bool) {
     return func(yield func(int) bool) {
         for i := 1; i <= n; i++ {
-            if !yield(i * i) { // 把平方数交给调用方
-                return // yield 返回 false → 调用方 break 了，立即停止
+            if !yield(i * i) {
+                return
             }
         }
     }
 }
 
-// 第四步：Go 1.23+ 的 range-over-func，直接 range 一个函数
-for v := range squares(5) {
-    fmt.Println(v) // 1 4 9 16 25
+func main() {
+    // 拿到迭代器函数
+    iter := squares(5)
+
+    // 手动调用它，传入「怎么处理每个值」
+    iter(func(v int) bool {
+        fmt.Println(v)
+        return true
+    })
 }
 ```
 
-理解要点：
+输出：
+```
+1
+4
+9
+16
+25
+```
 
-- `squares(5)` **返回一个函数**，这个函数签名是 `func(yield func(int) bool)`
-- `for v := range squares(5)` 等价于：调用 `squares(5)` 拿到那个函数，然后「带着一个 yield 回调」去执行它
-- `yield(i*i)` 被调用时，`i*i` 就赋给了循环变量 `v`，循环体执行
-- 循环体执行完后，`yield` 返回 `true`（继续）或 `false`（break 了）
+看起来跟演化 1 差不多？是的——**只是把回调拆成了两步**：先 `squares(n)` 返回迭代器函数，再调用它传 yield。好处是迭代器可以「存起来、传来传去、组合」。
 
-### 4. 提前终止与资源清理
+### 演化 3：range-over-func 语法糖（Go 1.23+）
 
-迭代器的 `yield` 返回 `false` 时，迭代器函数应当立即 return。这一点在**带资源清理**的场景特别重要：
+Go 1.23 给了终极语法糖：可以直接 `for v := range 迭代器函数`！
 
 ```go
-// 一个读文件的迭代器：必须保证文件被关闭
+package main
+
+import "fmt"
+
+func squares(n int) func(yield func(int) bool) {
+    return func(yield func(int) bool) {
+        for i := 1; i <= n; i++ {
+            if !yield(i * i) {
+                return
+            }
+        }
+    }
+}
+
+func main() {
+    // ✨ Go 1.23+ 魔法：直接 range 一个函数！
+    for v := range squares(5) {
+        fmt.Println(v)
+    }
+
+    fmt.Println("---")
+
+    // break 也能用：迭代器会收到 yield=false 并停止
+    for v := range squares(100) {
+        if v > 20 {
+            break
+        }
+        fmt.Println(v)
+    }
+}
+```
+
+输出：
+```
+1
+4
+9
+16
+25
+---
+1
+4
+9
+16
+```
+
+**这就是 range-over-func**。`for v := range f` 里的 `f` 现在可以是：
+- slice / map / channel（旧功能）
+- **迭代器函数**（新功能，签名是 `func(yield func(T) bool)`）
+
+底层编译器会自动帮你把循环体包装成 `yield` 回调传给 `f`。
+
+### 进阶 1：提前退出与资源清理
+
+迭代器的一个杀手锏：**调用方 break 时，迭代器函数的 defer 会自动执行**。这点比 channel 安全得多。
+
+看一个读文件的例子：
+
+```go
+package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+    "strings"
+)
+
+// lines 返回一个读文件每一行的迭代器
 func lines(path string) func(yield func(string) bool) {
     return func(yield func(string) bool) {
         f, err := os.Open(path)
         if err != nil {
             return
         }
-        defer f.Close() // 无论正常结束还是 break，都会关闭
+        defer f.Close() // ⭐ 无论怎么退出，文件都会关闭
+
         sc := bufio.NewScanner(f)
         for sc.Scan() {
             if !yield(sc.Text()) {
-                return // 调用方 break → 立即返回 → defer 关闭文件
+                return // 调用方 break → return → defer f.Close() 触发
             }
         }
     }
 }
 
-// 调用方提前 break，文件仍会被正确关闭
-for line := range lines("/etc/hosts") {
-    if strings.Contains(line, "localhost") {
-        break // yield 收到 false → 迭代器 return → defer f.Close()
+func main() {
+    // 假设有个测试文件
+    content := "line1\nline2\nline3\nSTOP\nline5\nline6"
+    os.WriteFile("/tmp/test.txt", []byte(content), 0644)
+
+    // 找到 STOP 就停
+    for line := range lines("/tmp/test.txt") {
+        fmt.Println("读到:", line)
+        if strings.TrimSpace(line) == "STOP" {
+            break // 文件仍然会被正确关闭！
+        }
     }
+    fmt.Println("结束，文件已关闭")
 }
 ```
 
-这个「调用方 break → 迭代器收到 yield=false → 立即清理」的链路，是迭代器相比手写 goroutine+channel 的一个重要优势：**清理路径是隐式确定的**，不依赖调用方记得发取消信号。
+输出：
+```
+读到: line1
+读到: line2
+读到: line3
+读到: STOP
+结束，文件已关闭
+```
 
-### 5. 迭代器组合：管道模式
+**对比 channel 方案**：如果用 channel，调用方 break 后生产者 goroutine 还在往已关闭的 channel 发数据会 panic；不 drain 干净会 goroutine 泄漏。迭代器没这个问题——**单 goroutine，defer 一定执行**。
 
-迭代器函数可以像 Unix 管道一样组合——一个迭代器的输出喂给下一个。这是 trpc-agent-go 多个 model 装饰器（hedge、failover）的核心技巧。
+### 进阶 2：组合成管道
+
+迭代器函数可以像 Unix 管道一样串起来：`map` 转换、`filter` 过滤。
 
 ```go
-// map：把 Seq[T] 转成 Seq[U]
-func mapIter[T, U any](src iter.Seq[T], fn func(T) U) iter.Seq[U] {
-    return func(yield func(U) bool) {
-        for v := range src {
-            if !yield(fn(v)) {
+package main
+
+import "fmt"
+
+// 生成 1 到 n 的整数
+func counter(n int) func(yield func(int) bool) {
+    return func(yield func(int) bool) {
+        for i := 1; i <= n; i++ {
+            if !yield(i) {
                 return
             }
         }
@@ -128,9 +332,9 @@ func mapIter[T, U any](src iter.Seq[T], fn func(T) U) iter.Seq[U] {
 }
 
 // filter：只保留满足条件的元素
-func filterIter[T any](src iter.Seq[T], ok func(T) bool) iter.Seq[T] {
-    return func(yield func(T) bool) {
-        for v := range src {
+func filter(src func(yield func(int) bool), ok func(int) bool) func(yield func(int) bool) {
+    return func(yield func(int) bool) {
+        for v := range src { // 消费上游迭代器
             if ok(v) {
                 if !yield(v) {
                     return
@@ -140,185 +344,182 @@ func filterIter[T any](src iter.Seq[T], ok func(T) bool) iter.Seq[T] {
     }
 }
 
-// 组合：取 1-10，过滤偶数，每个乘以 10
-src := func(yield func(int) bool) {
-    for i := 1; i <= 10; i++ {
-        if !yield(i) { return }
+// map：转换每个元素
+func mapIter(src func(yield func(int) bool), fn func(int) int) func(yield func(int) bool) {
+    return func(yield func(int) bool) {
+        for v := range src {
+            if !yield(fn(v)) {
+                return
+            }
+        }
     }
 }
-even := filterIter(src, func(i int) bool { return i%2 == 0 })
-scaled := mapIter(even, func(i int) int { return i * 10 })
 
-for v := range scaled {
-    fmt.Println(v) // 20 40 60 80 100
+func main() {
+    // 管道：1-10 → 只留偶数 → 每个乘 10
+    src := counter(10)
+    evens := filter(src, func(i int) bool { return i%2 == 0 })
+    scaled := mapIter(evens, func(i int) int { return i * 10 })
+
+    for v := range scaled {
+        fmt.Println(v) // 20 40 60 80 100
+    }
 }
 ```
 
-注意组合的**惰性**：`scaled` 不会先把全部算出来，而是每次 `yield` 时沿着 `mapIter → filterIter → src` 反向拉一个值。trpc-agent-go 的模型装饰器链正是这么干的。
+输出：
+```
+20
+40
+60
+80
+100
+```
 
-### 6. 迭代器 vs channel：什么时候用哪个
+**关键点**：`scaled` 不会先把 1-10 全过滤完再乘 10。它是**惰性**的——`for v := range scaled` 每取一个值，就沿着 `mapIter → filter → counter` 反向拉一个。这正是 trpc-agent-go 模型装饰器的工作方式。
 
-| 维度 | `iter.Seq`（迭代器） | `<-chan T`（channel） |
-|------|---------------------|----------------------|
-| **goroutine 开销** | 无，在调用方 goroutine 内运行 | 通常需要一个生产者 goroutine |
-| **调度开销** | 函数调用级别，极低 | channel 收发涉及运行时调度 |
-| **取消语义** | `yield` 返回 `false` 即停止 | `ctx.Done()` 或 close channel |
-| **跨 goroutine** | 不能，单 goroutine 内 | 天然支持跨 goroutine |
-| **多生产者** | 不直接支持 | 多个 goroutine 往同一 channel 发 |
-| **典型场景** | 同步遍历、惰性序列、装饰器管道 | 异步流式、多生产者、跨 goroutine 通信 |
+### 对比：迭代器 vs channel，什么时候用哪个
 
-一句话：**不需要跨 goroutine 时，迭代器比 channel 更轻**。trpc-agent-go 的策略是：底层模型调用用迭代器（同步、单 goroutine、可组合），上层 Agent 间通信用 channel（异步、跨 goroutine）。
+| 场景 | 用迭代器 | 用 channel |
+|------|---------|-----------|
+| 遍历已知数据（文件行、slice） | ✅ | ❌ 杀鸡用牛刀 |
+| 同步转换/过滤数据流 | ✅ | ❌ |
+| 单个 goroutine 内消费 | ✅ | ❌ |
+| 跨 goroutine 异步通信 | ❌ | ✅ |
+| 多个生产者往同一流塞数据 | ❌ | ✅ |
+| 调用方可能提前 break | ✅（defer 自动清理）| ⚠️（要小心 drain）|
+
+**一句话**：同一个 goroutine 里干活，迭代器更轻；要跨 goroutine，channel 更合适。
 
 ## 在 trpc-agent-go 里
 
+现在你已经理解迭代器了。来看 trpc-agent-go 怎么用它。
+
 ### 1. 框架自定义的 `Seq` 类型
 
-trpc-agent-go 定义了自己的迭代器类型（与标准库 `iter.Seq` 同构），见 `model/model.go:60`：
+trpc-agent-go 定义了自己的迭代器类型（和标准库 `iter.Seq` 一模一样），见 `model/model.go:60`：
 
 ```go
 // Seq is a callback-based sequence that yields values.
 type Seq[T any] func(yield func(T) bool)
 ```
 
-为什么自定义而不用 `iter.Seq`？因为框架要兼容 Go 1.21+，而 `iter` 包是 1.23 才进标准库的。这个自定义类型让框架在低版本 Go 也能编译（只是 range-over-func 语法在 1.23 前不可用）。
+**为什么不用标准库 `iter.Seq`？** 因为框架要兼容 Go 1.21，而 `iter` 包是 1.23 才有的。这个自定义类型让框架在低版本也能编译。
 
-### 2. `IterModel`：迭代器驱动的流式模型接口
+### 2. `IterModel`：用迭代器流式产出 LLM 响应
 
-框架提供了一个可选的 `Model` 扩展接口，用迭代器取代 channel 来流式产出响应，见 `model/model.go:63-70`：
+框架提供了一个**可选**的模型接口，用迭代器取代 channel 来流式返回响应。见 `model/model.go:63`：
 
 ```go
-// IterModel is an optional extension of Model that streams responses in the caller goroutine.
-// When implemented, flows may prefer this method to reduce goroutine and channel scheduling overhead.
-// Implementations should yield *Response values, including API-level and stream-level errors encoded in Response.Error.
-// The returned error is reserved for failures that prevent creating the iterator.
+// IterModel 在调用方的 goroutine 里流式产出响应，
+// 减少 goroutine 和 channel 的调度开销。
 type IterModel interface {
     Model
     GenerateContentIter(ctx context.Context, request *Request) (Seq[*Response], error)
 }
 ```
 
-注释说得很直白：**在调用方 goroutine 里流式产出，减少 goroutine 和 channel 调度开销**。错误也编码进 `Response.Error` 一起 yield，返回的 error 只表示「连迭代器都建不起来」的致命错误。
+**这段注释是理解框架的关键**：传统的 `GenerateContent` 返回 `<-chan *Response`，需要一个生产者 goroutine 往 channel 里塞。而 `GenerateContentIter` 返回 `Seq[*Response]`（迭代器），调用方在自己的 goroutine 里 `for resp := range seq` 就能消费——**没有额外的 goroutine**。
 
-### 3. 真实实现：OpenAI provider
+### 3. 真实实现：OpenAI provider（简化版）
 
-`model/openai/openai.go:515` 实现了 `GenerateContentIter`，返回一个闭包，内部按需 yield 每个 chunk：
+`model/openai/openai.go:515` 实现了 `GenerateContentIter`。下面是简化后的核心逻辑：
 
 ```go
+// 简化版：展示迭代器如何流式产出
 func (m *Model) GenerateContentIter(
     ctx context.Context,
     request *model.Request,
 ) (model.Seq[*model.Response], error) {
-    chatRequest, opts, err := m.prepareChatRequest(ctx, request)
+    chatRequest, err := m.prepareChatRequest(ctx, request)
     if err != nil {
         return nil, err // 建迭代器就失败 → 返回 error
     }
+    // 返回一个迭代器函数（闭包，捕获了 chatRequest）
     return func(yield func(*model.Response) bool) {
-        reporter := modeltelemetry.StartChat(ctx, m, request, m.chatTelemetry)
-        defer reporter.End() // yield 链路结束（含 break）→ 自动收尾
-        // ...
+        // ... 打开 HTTP 流、初始化 telemetry ...
+
+        // emit 是内部辅助：把一个 chunk yield 出去
         emit := func(resp *model.Response) bool {
             if ctx.Err() != nil {
-                return false // ctx 取消 → 停止 yield
+                return false // ctx 取消 → 停止
             }
-            reporter.TrackResponse(resp)
-            return yield(resp) // 把 resp 交给 for 循环，返回是否继续
+            return yield(resp) // 交给 for 循环，返回是否继续
         }
-        // ... 遍历底层 HTTP 流，逐 chunk 调用 emit ...
+
+        // 遍历 HTTP 响应流的每个 chunk
+        for chunk := range httpClient.Stream(chatRequest) {
+            resp := parseChunk(chunk)
+            if !emit(resp) {
+                return // 调用方 break 或 ctx 取消 → 停止
+            }
+        }
     }, nil
 }
 ```
 
-注意几个细节：
-
-- `defer reporter.End()` 保证了无论调用方 break 还是正常结束，telemetry 都会收尾——这正是前面讲的「迭代器隐式清理」优势
-- `emit` 闭包同时检查 `ctx.Err()` 和 `yield` 返回值，把「ctx 取消」和「调用方 break」统一成「停止 yield」
-- 整个流式消费**没有新建 goroutine**，比 `<-chan *Response` 省掉生产者 goroutine + channel 同步
-
-调用方这样消费：
+调用方这样用（伪代码）：
 
 ```go
-seq, err := model.GenerateContentIter(ctx, req)
-if err != nil { /* 致命错误 */ }
-for resp := range seq { // range-over-func，在自己 goroutine 里
-    if resp.Error != nil { /* 流内错误，继续或 break */ }
-    handleChunk(resp)
+seq, err := openaiModel.GenerateContentIter(ctx, req)
+if err != nil {
+    // 致命错误，连迭代器都建不起来
 }
+
+// 在「自己的」goroutine 里消费，没有新建 goroutine
+for resp := range seq {
+    fmt.Print(resp.Choices[0].Delta.Content) // 逐 token 打印
+}
+// 循环结束 = 流结束（或 break）
 ```
 
-### 4. 装饰器组合：hedge / failover
+### 4. 装饰器：hedge / failover（进阶，可跳过）
 
-trpc-agent-go 的对冲模型（hedge）、故障转移模型（failover）就是用迭代器组合实现的——它们**包装**上游模型的迭代器，在外层迭代器里决定「yield 哪个上游的结果」。
+trpc-agent-go 的对冲模型（hedge）、故障转移模型（failover）用迭代器**包装**上游模型，实现组合。这是「迭代器套迭代器」的模式。
 
-`model/failover/failover.go:95` 的故障转移模型：
+`model/failover/failover.go:95` 简化逻辑：
 
 ```go
-func (m *failoverModel) GenerateContentIter(
-    ctx context.Context,
-    request *model.Request,
-) (model.Seq[*model.Response], error) {
-    // ... 准备首个候选 ...
+func (m *failoverModel) GenerateContentIter(...) (model.Seq[*Response], error) {
     return func(yield func(*model.Response) bool) {
-        m.runAttempts(ctx, request, initialAttempt, yield)
+        for _, candidate := range m.models {
+            seq, err := candidate.GenerateContentIter(ctx, req)
+            if err != nil {
+                continue // 这个候选连不上，试下一个
+            }
+            // 把这个候选的迭代器透传给外层 yield
+            ok := true
+            for resp := range seq {
+                if !yield(resp) {
+                    return // 调用方 break
+                }
+                if resp.Error != nil {
+                    ok = false
+                    break // 这个候选出错了，换下一个
+                }
+            }
+            if ok {
+                return // 成功完成，不再试下一个
+            }
+        }
     }, nil
 }
 ```
 
-`runAttempts` 内部会依次尝试候选模型，每个候选返回一个 `model.Seq[*Response]`（注意是 `Seq` 不是 channel），失败就切下一个，成功就把那个迭代器的 yield 透传给外层 `yield`。这本质上是「**迭代器套迭代器**」——外层迭代器决定用哪个内层迭代器，内层迭代器负责真正的流式产出。
+**关键理解**：外层迭代器（failover 的）决定「用哪个内层迭代器」，内层迭代器（单个模型的）负责真正流式产出。这就是「迭代器组合」的威力——接口统一是 `Seq[*Response]`，但内部可以层层包装。
 
-`model/hedge/hedge.go:158` 的对冲模型同理：
+### 5. 其它用到迭代器的地方
 
-```go
-return func(yield func(*model.Response) bool) {
-    m.runHedge(ctx, request, yield)
-}, nil
-```
+框架在多处复用迭代器抽象：
 
-`runHedge` 会并行启动多个上游请求（goroutine），但**收敛到一个 yield**——把最快返回有效结果的那个流的 chunk 透传出去。这是「跨 goroutine 收集 + 单 goroutine yield」的混合模式。
-
-### 5. LLM 执行流里的迭代器串联
-
-`internal/flow/llmflow/llmflow.go:2146` 是 LLMAgent 执行的核心，它把「before 回调 → 模型调用 → after 回调」串成一个迭代器管道：
-
-```go
-ctx, customResp, err := f.runBeforeModelCallbacks(ctx, invocation, llmRequest)
-if err != nil {
-    return ctx, nil, err
-}
-if customResp != nil {
-    // before 回调短路返回了响应 → 用一个单元素迭代器包装
-    return ctx, func(yield func(*model.Response) bool) {
-        yield(customResp)
-    }, nil
-}
-// 正常路径：拿到模型的 Seq，可能再套一层 after 回调的转换
-seq, err := f.generateContentSeq(ctx, invocation, llmRequest, callModel)
-if err != nil {
-    return ctx, nil, err
-}
-return ctx, seq, nil
-```
-
-注意 `if customResp != nil` 分支：before 回调想短路时，框架用一个「只 yield 一次」的迭代器把那个响应包成流式接口——**对外接口统一是 `Seq[*Response]`**，调用方不需要区分「真流式」和「假流式」。
-
-### 6. Graph 里的迭代器
-
-`graph/state_graph.go:1915` 也用迭代器包装单条响应，让图节点的输出和流式输出共用同一接口：
-
-```go
-func singleResponseStream(response *model.Response) modelResponseStream {
-    return modelResponseStream{
-        Seq: func(yield func(*model.Response) bool) {
-            yield(response) // 只 yield 一次的单元素迭代器
-        },
-    }
-}
-```
-
-这是「单元素迭代器」的最简形态——一个不想流式但被迫塞进流式接口的响应，就用这种「yield 一次就 return」的迭代器冒充。
+- **`model/hedge/hedge.go:158`**：对冲模型，并行打多个请求，取最快返回的
+- **`tool/openapi/operation.go:293`**：遍历 OpenAPI 的 path-item（`iter.Seq2[string, *Operation]`）
+- **`internal/flow/llmflow/llmflow.go:2146`**：LLM 执行流，串联 before 回调 → 模型 → after 回调
+- **`graph/state_graph.go:1915`**：图节点输出，用单元素迭代器让非流式响应冒充流式
 
 ## 常见陷阱
 
-### ❌ 把迭代器当 channel 用，期待它跨 goroutine
+### ❌ 把迭代器当 channel 用，期待跨 goroutine
 
 ```go
 seq, _ := model.GenerateContentIter(ctx, req)
@@ -327,43 +528,42 @@ go func() {
         handle(resp)
     }
 }()
-// 主 goroutine 无法安全地「同时」消费同一个 seq
+// 主 goroutine 和子 goroutine 不能同时消费同一个 seq
 ```
 
-迭代器**不是并发安全的流**。它只是一个函数，谁 range 它、它就在谁的 goroutine 里跑。需要跨 goroutine 流式时，用 channel（trpc-agent-go 的 Agent.Run 返回 `<-chan *event.Event` 就是这个原因）。
+迭代器**不是并发安全的流**。它只是一个函数，谁 range 它、它就在谁的 goroutine 里跑。需要跨 goroutine 时用 channel（`Agent.Run` 返回 `<-chan *event.Event` 就是这个原因）。
 
-### ❌ 迭代器函数里 yield 之后还继续干重活
+### ❌ yield 返回 false 后还继续干重活
 
 ```go
-// ❌ yield 返回 false（调用方 break 了）却不检查，继续做无用功
+// ❌ 不检查返回值，调用方 break 了还在傻跑
 func badIter(yield func(int) bool) {
     for i := 0; i < 1000000; i++ {
         yield(i)         // 调用方早 break 了
-        expensiveWork(i) // 还在傻跑
+        expensiveWork(i) // 还在做无用功
     }
 }
 ```
 
 ```go
-// ✅ 检查 yield 返回值，false 就立即停止
+// ✅ 检查返回值，false 就立刻停
 func goodIter(yield func(int) bool) {
     for i := 0; i < 1000000; i++ {
         if !yield(i) {
-            return // 调用方不想要了，立刻退出
+            return
         }
     }
 }
 ```
 
-这也是 `openai.go` 的 `emit` 闭包里 `return yield(resp)` 的原因——透传调用方的「继续/停止」信号。
+这也是 `openai.go` 里 `emit` 闭包写成 `return yield(resp)` 的原因。
 
-### ❌ 在迭代器函数里启动 goroutine 却不等待它结束
+### ❌ 在迭代器里启动 goroutine 却不管理它
 
 ```go
-// ❌ 启动了 goroutine，迭代器 return 后 goroutine 还在跑，可能访问已释放资源
+// ❌ 迭代器 return 了，goroutine 还在跑，可能访问已释放的资源
 func badStream(yield func(*Resp) bool) {
-    ch := make(chan *Resp)
-    go produce(ch) // 这个 goroutine 在迭代器 return 后继续跑
+    go produceInBg(...) // 这个 goroutine 在迭代器 return 后继续跑
     for r := range ch {
         if !yield(r) { return }
     }
@@ -371,68 +571,52 @@ func badStream(yield func(*Resp) bool) {
 ```
 
 ```go
-// ✅ 要么不用 goroutine（迭代器本来就是单 goroutine 的），要么确保 goroutine 在迭代器 return 前退出
+// ✅ 要么不用 goroutine，要么确保它随迭代器退出而退出
 func goodStream(yield func(*Resp) bool) {
-    ch := make(chan *Resp)
     ctx, cancel := context.WithCancel(context.Background())
-    defer cancel() // 迭代器 return → cancel → 生产 goroutine 收到信号退出
+    defer cancel() // 迭代器 return → cancel → goroutine 收到信号退出
     go produce(ctx, ch)
-    for {
-        select {
-        case <-ctx.Done():
-            return
-        case r, ok := <-ch:
-            if !ok { return }
-            if !yield(r) { return }
-        }
+    for r := range ch {
+        if !yield(r) { return }
     }
 }
 ```
 
-如果你发现自己在迭代器里写 goroutine + channel，**先停下来问自己**：是不是该直接用 channel 接口（`<-chan *Response`）而不是迭代器？trpc-agent-go 的 hedge 模型是少数合理这样做的场景，因为它要并行打多个请求再收敛。
+如果你发现自己在迭代器里写 goroutine + channel，**先停下来问**：是不是直接用 channel 接口更合适？
 
 ### ❌ 误以为 range-over-func 在所有 Go 版本可用
 
-range-over-func 是 **Go 1.23+** 引入的。trpc-agent-go 的 `go.mod` 声明 `go 1.21`，所以：
+range-over-func 是 **Go 1.23+** 的特性。
 
-- **`model.Seq[T]` 类型本身**在 1.21 就能用（它只是个函数类型）
-- **`for resp := range seq`**（range-over-func 语法）需要 1.23+
+- **`model.Seq[T]` 类型本身**在 Go 1.21 就能用（它只是个普通函数类型）
+- **`for resp := range seq`**（range-over-func 语法）需要 **Go 1.23+**
 
-如果你的项目还卡在 1.21/1.22，要么升级到 1.23+，要么这些迭代器 API 对你不可见——请用 channel 版本的接口（如 `Model.GenerateContent` 返回 `<-chan`）。框架通过 build tag 在低版本降级到 channel 实现。
+如果你的项目还在 Go 1.21/1.22，用 channel 版本的接口（`Model.GenerateContent` 返回 `<-chan`）即可。
 
-### ❌ 混淆「yield 单元素」和「返回 slice」
+### ❌ 把迭代器当成「收集所有结果」的工具
 
 ```go
-// ❌ 把所有结果先收集成 slice 再返回——丢掉了惰性
+// ❌ 丢掉了惰性，相当于退化成 slice
 func collectAll(src model.Seq[*Response]) []*Response {
     var all []*Response
-    all = append(all, ...) // 必须先全部跑完
+    for r := range src {
+        all = append(all, r) // 先全部跑完
+    }
     return all
 }
 ```
 
-```go
-// ✅ 用 range 透传，保持惰性
-func passThrough(src model.Seq[*Response]) model.Seq[*Response] {
-    return func(yield func(*Response) bool) {
-        for r := range src {
-            if !yield(r) { return }
-        }
-    }
-}
-```
-
-迭代器的核心价值是**惰性**——消费者取一个才生产一个。如果你发现自己在迭代器里 `append` 收集全部，多半是用错了工具，应该直接用 slice。
+迭代器的核心价值是**惰性**——取一个算一个。如果你要全部结果，直接让函数返回 slice 更清晰。
 
 ## 小结
 
-- range-over-func 让函数可以直接被 `for range`，是 Go 1.23+ 的迭代器语法
-- 迭代器函数是个**闭包**，捕获要遍历的数据，通过 `yield` 回调把元素一个一个交给 `for` 循环
-- `yield` 返回 `false` 表示调用方 `break`，迭代器必须立即 return 并清理资源（defer 会触发）
-- 迭代器可以像管道一样组合（map/filter/包装），trpc-agent-go 的 hedge/failover 装饰器正是这么实现的
-- 迭代器 vs channel：**单 goroutine、不需要跨线程通信时，迭代器更轻**；跨 goroutine 流式仍用 channel
-- trpc-agent-go 用 `model.Seq[T]` 定义迭代器类型，`IterModel.GenerateContentIter` 用迭代器在调用方 goroutine 里流式产出响应，省掉生产者 goroutine
-- 框架在 openai/hedge/failover/llmflow/graph 等多处复用迭代器抽象，统一了「真流式」和「单元素冒充流式」的接口
+- 迭代器 = 把「一个一个取元素」的能力封装成函数，可以传来传去、可以组合
+- Go 1.23 的 range-over-func 让你能直接 `for v := range 迭代器函数`
+- `yield(v)` 把值交给调用方，返回 `false` 表示调用方 break 了，迭代器要立即停止
+- 调用方 break 时，迭代器函数的 `defer` 会自动执行——资源清理比 channel 安全
+- 迭代器可以像管道组合（map/filter），trpc-agent-go 的 hedge/failover 正是这么做的
+- **迭代器 vs channel**：同一 goroutine 用迭代器更轻；跨 goroutine 用 channel
+- trpc-agent-go 用 `model.Seq[T]` 类型，`IterModel.GenerateContentIter` 在调用方 goroutine 里流式产出，省掉生产者 goroutine
 
 **延伸阅读**：
 
