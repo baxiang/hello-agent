@@ -41,7 +41,7 @@
 
 **Files:**
 - Read: `docs/trpc-agent-go/08-memory.md`（314 行）
-- Modify: `docs/trpc-agent-go/examples/07-memory-system/memory.md`
+- Modify: `docs/trpc-agent-go/examples/06-memory-system/memory.md`
 - Exemplar: 先读该文件看现有结构
 
 **Agent 要点：**
@@ -53,7 +53,7 @@
 
 **Files:**
 - Read: `docs/trpc-agent-go/05-tool.md`（347 行）、`docs/trpc-agent-go/06-tool-advanced.md`（377 行）
-- Modify: `docs/trpc-agent-go/examples/03-tool-system/tool.md`
+- Modify: `docs/trpc-agent-go/examples/02-tool-system/tool.md`
 - Exemplar: 先读该文件看现有结构
 
 **Agent 要点：**

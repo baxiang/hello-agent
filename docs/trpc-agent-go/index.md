@@ -320,15 +320,15 @@ tRPC-Agent-Go 以三大支柱融入 AI 工程生态：
 ## 学习路线建议
 
 1. **[Agent 基础](./examples/01-agent-basics/)** — 理解 LLMAgent 执行循环，是所有 Agent 类型的基础
-2. **[Model 模型层](./examples/14-model-provider/model)** — 理解 LLM 调用机制，如何接入不同模型
-3. **[Tool 工具系统](./examples/03-tool-system/tool)** — 理解 Agent 如何与外部交互
-4. **[Session 会话](./examples/08-session-management/session)** — 对话上下文持久化
-5. **[Multi-Agent 编排](./examples/06-multi-agent/multiagent)** — Chain/Parallel/Cycle 组合模式
-6. **[Memory 记忆](./examples/07-memory-system/memory)** — 跨对话用户信息积累
-7. **[Knowledge RAG](./examples/13-knowledge-rag/knowledge)** — 知识库检索增强
-8. **[Graph 工作流](./examples/05-graph-workflow/graph)** — 图工作流（含基础与高级模式）
-9. **[MCP 协议](./examples/04-mcp-tools/mcptool)** — 工具标准协议
-10. **[A2A 协议](./examples/10-a2a-protocol/)** — 跨框架互操作
-11. **[AG-UI 协议](./examples/11-agui-protocol/)** — 前端实时交互
-12. **[可观测性](./examples/17-observability/callbacks)** — 监控与调试
+2. **[Model 模型层](./examples/13-model-provider/model)** — 理解 LLM 调用机制，如何接入不同模型
+3. **[Tool 工具系统](./examples/02-tool-system/tool)** — 理解 Agent 如何与外部交互
+4. **[Session 会话](./examples/07-session-management/session)** — 对话上下文持久化
+5. **[Multi-Agent 编排](./examples/05-multi-agent/multiagent)** — Chain/Parallel/Cycle 组合模式
+6. **[Memory 记忆](./examples/06-memory-system/memory)** — 跨对话用户信息积累
+7. **[Knowledge RAG](./examples/12-knowledge-rag/knowledge)** — 知识库检索增强
+8. **[Graph 工作流](./examples/04-graph-workflow/graph)** — 图工作流（含基础与高级模式）
+9. **[MCP 协议](./examples/03-mcp-tools/mcptool)** — 工具标准协议
+10. **[A2A 协议](./examples/09-a2a-protocol/)** — 跨框架互操作
+11. **[AG-UI 协议](./examples/10-agui-protocol/)** — 前端实时交互
+12. **[可观测性](./examples/16-observability/callbacks)** — 监控与调试
 13. **[示例总览](./examples/)** — 完整示例目录（含协议服务端总览）

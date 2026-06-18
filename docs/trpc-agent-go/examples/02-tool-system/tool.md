@@ -395,4 +395,4 @@ sg.AddToolsNode("tools", tools, graph.WithToolCallRetryPolicy(policy))
 
 Tool 系统的设计精髓在于**抽象统一、实现可换**：同一套 `tool.Tool` / `tool.ToolSet` 接口，下层可以是本机代码、宿主机 shell、外部检索服务、开放网页；上层注册方式只有 `WithTools` / `WithToolSets` 两种。理解了 codeexec 的最简骨架，其它三个示例都是在这个骨架上替换"工具来源"和"事件处理细节"。
 
-Tool 与 [`06-memory-system/`](../07-memory-system/memory.md) 紧密配合：Memory 让 Agent 跨会话记住信息，Tool 让 Agent 在单次会话里调用外部能力。生产环境通常会把多个 Tool / ToolSet 一起注册给同一个 Agent——比如同时给模型 `execute_code` + `web_fetch` + `memory_search`，让它在一次对话中自由组合。
+Tool 与 [`06-memory-system/`](../06-memory-system/memory.md) 紧密配合：Memory 让 Agent 跨会话记住信息，Tool 让 Agent 在单次会话里调用外部能力。生产环境通常会把多个 Tool / ToolSet 一起注册给同一个 Agent——比如同时给模型 `execute_code` + `web_fetch` + `memory_search`，让它在一次对话中自由组合。

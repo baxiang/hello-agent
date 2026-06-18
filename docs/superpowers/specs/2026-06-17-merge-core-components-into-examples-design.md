@@ -32,17 +32,17 @@
 | # | 目标索引页 | 源核心组件 | 类型 |
 |---|----------|-----------|------|
 | 1 | `examples/01-agent-basics/index.md` | `01-agent.md` + `03-runner.md` | 新建 |
-| 2 | `examples/03-tool-system/tool.md` | `05-tool.md` + `06-tool-advanced.md` | 增节 |
-| 3 | `examples/04-mcp-tools/mcptool.md` | `15-mcp.md` | 增节 |
-| 4 | `examples/05-graph-workflow/graph.md` | `10-graph.md` + `11-graph-advanced.md` + `02-agent-types.md`（GraphAgent 部分） | 增节 |
-| 5 | `examples/06-multi-agent/multiagent.md` | `02-agent-types.md`（Chain/Parallel/Cycle 部分） | 增节 |
-| 6 | `examples/07-memory-system/memory.md` | `08-memory.md` | 增节 |
-| 7 | `examples/08-session-management/session.md` | `07-session.md` | 增节 |
-| 8 | `examples/10-a2a-protocol/index.md` | `17-a2a.md` | 新建 |
-| 9 | `examples/11-agui-protocol/index.md` | `16-agui.md` | 新建 |
-| 10 | `examples/13-knowledge-rag/knowledge.md` | `09-knowledge.md` | 增节 |
-| 11 | `examples/14-model-provider/model.md` | `04-model.md` | 增节 |
-| 12 | `examples/17-observability/callbacks.md` | `13-observability.md` | 增节 |
+| 2 | `examples/02-tool-system/tool.md` | `05-tool.md` + `06-tool-advanced.md` | 增节 |
+| 3 | `examples/03-mcp-tools/mcptool.md` | `15-mcp.md` | 增节 |
+| 4 | `examples/04-graph-workflow/graph.md` | `10-graph.md` + `11-graph-advanced.md` + `02-agent-types.md`（GraphAgent 部分） | 增节 |
+| 5 | `examples/05-multi-agent/multiagent.md` | `02-agent-types.md`（Chain/Parallel/Cycle 部分） | 增节 |
+| 6 | `examples/06-memory-system/memory.md` | `08-memory.md` | 增节 |
+| 7 | `examples/07-session-management/session.md` | `07-session.md` | 增节 |
+| 8 | `examples/09-a2a-protocol/index.md` | `17-a2a.md` | 新建 |
+| 9 | `examples/10-agui-protocol/index.md` | `16-agui.md` | 新建 |
+| 10 | `examples/12-knowledge-rag/knowledge.md` | `09-knowledge.md` | 增节 |
+| 11 | `examples/13-model-provider/model.md` | `04-model.md` | 增节 |
+| 12 | `examples/16-observability/callbacks.md` | `13-observability.md` | 增节 |
 | 13 | `examples/README.md` | `12-server.md`（新增「协议服务端总览」节） | 增节 |
 | 14 | `docs/trpc-agent-go/index.md` | `14-ecosystem.md`（融入生态总览） | 增节 |
 
@@ -97,24 +97,24 @@
 ### 批次 1（试点，4 任务）— 验证范式
 覆盖 4 种场景：新建 / 增节 / 双源合并 / 顶层
 1. 新建 `examples/01-agent-basics/index.md`（← 01-agent + 03-runner）
-2. 增节 `examples/07-memory-system/memory.md`（← 08-memory）
-3. 双源合并 `examples/03-tool-system/tool.md`（← 05-tool + 06-tool-advanced）
+2. 增节 `examples/06-memory-system/memory.md`（← 08-memory）
+3. 双源合并 `examples/02-tool-system/tool.md`（← 05-tool + 06-tool-advanced）
 4. 顶层 `examples/README.md`（← 12-server，新增「协议服务端总览」节）
 
 **Review 点**：批次 1 完成后，用户过目一篇（如 `memory.md`），认可范式再放行后续。
 
 ### 批次 2（主力，6 任务）
-5. `examples/04-mcp-tools/mcptool.md`（← 15-mcp）
-6. `examples/05-graph-workflow/graph.md`（← 10-graph + 11-graph-advanced + 02 部分）
-7. `examples/06-multi-agent/multiagent.md`（← 02-agent-types）
-8. `examples/08-session-management/session.md`（← 07-session）
-9. `examples/13-knowledge-rag/knowledge.md`（← 09-knowledge）
-10. `examples/14-model-provider/model.md`（← 04-model）
+5. `examples/03-mcp-tools/mcptool.md`（← 15-mcp）
+6. `examples/04-graph-workflow/graph.md`（← 10-graph + 11-graph-advanced + 02 部分）
+7. `examples/05-multi-agent/multiagent.md`（← 02-agent-types）
+8. `examples/07-session-management/session.md`（← 07-session）
+9. `examples/12-knowledge-rag/knowledge.md`（← 09-knowledge）
+10. `examples/13-model-provider/model.md`（← 04-model）
 
 ### 批次 3（收尾，4 任务）
-11. 新建 `examples/10-a2a-protocol/index.md`（← 17-a2a）
-12. 新建 `examples/11-agui-protocol/index.md`（← 16-agui）
-13. `examples/17-observability/callbacks.md`（← 13-observability）
+11. 新建 `examples/09-a2a-protocol/index.md`（← 17-a2a）
+12. 新建 `examples/10-agui-protocol/index.md`（← 16-agui）
+13. `examples/16-observability/callbacks.md`（← 13-observability）
 14. `docs/trpc-agent-go/index.md`（← 14-ecosystem）
 
 ### 批次 4（手动收尾）

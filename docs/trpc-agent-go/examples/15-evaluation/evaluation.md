@@ -164,4 +164,4 @@ cd examples/evaluation/promptiter/syncrun && go run . -max-rounds 4
 
 评测系统的设计精髓在于**解耦**：同一套 `evaluation.New` 接口，存储侧可换 inmemory/local/mysql，准则侧可换 ROUGE/LLM 裁判/工具轨迹，裁判侧可注入 Runner 或写死 JSON，触发侧可走 CLI/HTTP/Langfuse。理解了 [`local`](./evaluation-local.md) 的骨架，其它示例都是在这个骨架上替换组件——最终在 [`promptiter`](./evaluation-promptiter.md) 里，评测本身又成了自动优化的目标函数，形成"度量 → 分析 → 改进"的完整闭环。
 
-评测系统与 [`session`](../08-session-management/session.md) 紧密配合：Session 维护单次会话上下文，评测负责对 Agent 在这些上下文中的表现打分。生产环境建议组合使用。
+评测系统与 [`session`](../07-session-management/session.md) 紧密配合：Session 维护单次会话上下文，评测负责对 Agent 在这些上下文中的表现打分。生产环境建议组合使用。

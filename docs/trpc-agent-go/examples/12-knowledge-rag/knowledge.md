@@ -324,4 +324,4 @@ cd examples/knowledge && ./run_examples.sh                  # 默认 inmemory
 
 Knowledge RAG 系列的设计精髓在于**完全解耦**：同一套 `knowledge.New()` 入口，数据源可换 7 种（file/dir/url/auto/repo/fixed-chunking/recursive-chunking），后端可换 6 种（inmemory/sqlitevec/pgvector/tcvector/elasticsearch/milvus），增强层可任意组合（enhancer/reranker/filter），工具形态可从单检索扩展到图遍历（graphrag）或 MCP 服务（code_context_engine）。
 
-入门路径：先跑通 [`basic`](./knowledge-basic.md)，再按"数据源 → 后端 → 增强 → 高级"的顺序按需扩展。生产建议：默认 [`pgvector`](./knowledge-vectorstores-postgres.md) 后端 + [`recursive-chunking`](./knowledge-sources-recursive-chunking.md) 分块 + 必要时叠加 [`query-enhancer`](./knowledge-query-enhancer.md) 和 [`reranker`](./knowledge-reranker-cohere.md)。Knowledge 与 [`memory/`](../07-memory-system/memory.md) 系统正交：前者管"外部知识检索"，后者管"用户长期记忆"，生产可组合使用。
+入门路径：先跑通 [`basic`](./knowledge-basic.md)，再按"数据源 → 后端 → 增强 → 高级"的顺序按需扩展。生产建议：默认 [`pgvector`](./knowledge-vectorstores-postgres.md) 后端 + [`recursive-chunking`](./knowledge-sources-recursive-chunking.md) 分块 + 必要时叠加 [`query-enhancer`](./knowledge-query-enhancer.md) 和 [`reranker`](./knowledge-reranker-cohere.md)。Knowledge 与 [`memory/`](../06-memory-system/memory.md) 系统正交：前者管"外部知识检索"，后者管"用户长期记忆"，生产可组合使用。
