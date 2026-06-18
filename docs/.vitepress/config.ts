@@ -897,8 +897,11 @@ export default withMermaid({
           collapsed: true,
           items: [
             { text: '并发模型与 Channel 事件流', link: '/trpc-agent-go/go-fundamentals/01-concurrency-channel' },
+            { text: '接口抽象与可插拔设计', link: '/trpc-agent-go/go-fundamentals/02-interfaces-pluggable' },
             { text: '函数选项模式', link: '/trpc-agent-go/go-fundamentals/03-functional-options' },
             { text: 'Context 生命周期与取消', link: '/trpc-agent-go/go-fundamentals/04-context-lifecycle' },
+            { text: '泛型与类型安全', link: '/trpc-agent-go/go-fundamentals/05-generics-types' },
+            { text: '迭代器', link: '/go-iterators/' },
           ]
         }
       ],
