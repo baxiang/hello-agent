@@ -891,6 +891,16 @@ export default withMermaid({
             },
           ]
         }
+        ,
+        {
+          text: 'Go 前置知识',
+          collapsed: true,
+          items: [
+            { text: '并发模型与 Channel 事件流', link: '/trpc-agent-go/go-fundamentals/01-concurrency-channel' },
+            { text: '函数选项模式', link: '/trpc-agent-go/go-fundamentals/03-functional-options' },
+            { text: 'Context 生命周期与取消', link: '/trpc-agent-go/go-fundamentals/04-context-lifecycle' },
+          ]
+        }
       ],
       '/go-iterators/': [
         {
